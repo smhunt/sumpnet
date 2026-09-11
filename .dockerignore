@@ -1,0 +1,9 @@
+.git
+.github
+bin
+deploy
+docs
+firmware
+loadtest
+web
+*.md

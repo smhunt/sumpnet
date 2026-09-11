@@ -1,0 +1,53 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - gosec
+    - ineffassign
+    - unused
+  settings:
+    govet:
+      enable:
+        - shadow
+    revive:
+      rules:
+        - name: exported
+          arguments: [checkPrivateReceivers]
+        - name: context-as-argument
+        - name: error-strings
+        - name: unused-parameter
+    gosec:
+      excludes:
+        # Integer overflow conversions; re-enable in Phase 1 once the codec
+        # exists and can be proven clean.
+        - G115
+  exclusions:
+    generated: lax
+    paths:
+      - gen/
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/smhunt/sumpnet
+  exclusions:
+    generated: lax
+    paths:
+      - gen/

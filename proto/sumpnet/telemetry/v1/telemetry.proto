@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package sumpnet.telemetry.v1;
+
+option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1;telemetryv1";
+
+// Phase 1 fills in IngestService (prompt_plan.md §8). This file exists so that
+// buf build/lint/breaking/generate run unguarded from Phase 0 onward.
