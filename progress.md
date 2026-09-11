@@ -3,11 +3,45 @@
 ## Status
 Phase: **0 — Scaffold** — DONE 2026-09-11 (all acceptance criteria met, CI run 34634272184 green)
 
-Phase: **1 — Contracts + simulator** — DONE 2026-09-11 (acceptance below; PR #2 awaiting merge)
+Phase: **2 — Ingest path** — DONE 2026-09-11 (acceptance below; branch `phase-2/ingest`)
 
-Next phase: **2 — Ingest path** (lora-bridge, mqtt-bridge, ingest, migrations, sqlc). Do not start until PR #2 is merged.
+Next phase: **3 — Cycle detection + alerts**. Do not start until the Phase 2 PR is merged.
 
 ## Session log (newest first)
+
+### 2026-09-11 (Phase 2, branch `phase-2/ingest`)
+- Decisions with owner: nodes are ESP32-S3 + SX1262 (LoRaWAN deployed path,
+  Wi-Fi → MQTT bench path); there are **no Particle Photons** — the Photon
+  line in §3 was obsolete. `mqtt-bridge` is now the node-MQTT bridge for the
+  `sumpnet/v1/{dev_eui}/up` envelope (`docs/node-mqtt.md`).
+- Schema (`migrations/`): segments, homes, devices (dev_eui natural key),
+  readings + cycle_events partitioned monthly by pg_partman (2026-01 → now+2,
+  infinite), storm_summaries, alarm_events; PK `(device_id, event time, f_cnt)`.
+  One-shot `migrate` compose job; Postgres runs in UTC.
+- `internal/store`: pgx pool with per-connection temp staging tables; batch =
+  COPY → devices upsert → `INSERT … ON CONFLICT DO NOTHING` → `pg_notify`;
+  on-demand partition creation; sqlc queries (`make sqlc`, CI `sqlc diff`).
+- `internal/ingest`: client-streaming handlers with a bounded batch queue;
+  a full queue stops Recv (HTTP/2 flow control = backpressure); validation
+  with per-reason reject counters.
+- `internal/bridge` (shared): manual-ack MQTT consumer, bounded batchers that
+  ack only after ingest confirms, stream-per-batch client with retry;
+  `lorabridge` (ChirpStack events) and `nodebridge` (Wi-Fi envelope) decoders.
+- Broker tuning for QoS 1 bursts: mosquitto `max_inflight_messages 1000`,
+  `max_queued_messages 100000`; ChirpStack `[integration.mqtt] qos=1`.
+- Compose: the simulator (a CLI since Phase 1) moved behind `COMPOSE_PROFILES=sim`;
+  it had been restart-looping as a "service".
+- ADR 0003 (LISTEN/NOTIFY) and ADR 0004 (native partitioning + pg_partman).
+
+#### Phase 2 acceptance
+- [x] `TestPipelineStorm` (testcontainers Postgres + Mosquitto, in-process
+  ingest + both bridges): storm25 × 10 homes = 1,996 events → 960 readings,
+  1,014 cycle events, 22 storm summaries (175 cycles), 0 alarms; per-device
+  rows == max f_cnt + 1 (no gaps); 1,014 + 175 == 1,189 true cycles; replaying
+  the same stream changes nothing and reports 1,996 duplicates; the Wi-Fi
+  transport leg doubles every count with the same bytes. ~6 s.
+- [x] Live stack: `make up`, `simulator -scenario storm25 -homes 10 -sink mqtt`
+  → identical DB counts, `sumpnet_bridge_drops_total` 0.
 
 ### 2026-09-11 (Phase 1, branch `phase-1/contracts`, PR #2)
 - Protos: `telemetry/v1` (IngestService: SubmitReadings, SubmitCycleEvents

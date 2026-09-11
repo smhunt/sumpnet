@@ -30,7 +30,12 @@ make down / make ps / make logs S=<service>
 make env     # copies deploy/compose/.env.example → .env if missing (make up does this)
 make test-integration                       # -tags integration; testcontainers, needs Docker
 make sim SCENARIO=storm50 SEED=42 SPEED=60  # replay into the stack's Mosquitto; truth → loadtest/results/
+make migrate-up / migrate-down / migrate-new NAME=x   # golang-migrate against the compose DB (from .env)
+make sqlc                                    # regenerate internal/store/sqlcgen (committed; CI runs sqlc diff)
+make db-shell                                # psql into the compose Postgres
 ```
+
+The simulator is a CLI: in compose it lives behind `COMPOSE_PROFILES=sim` and exits after one replay; `make up` does not start it.
 
 Single test: `go test -race -run TestName ./internal/sim/...`. `internal/sim` takes ~40 s under `-race` (integer-heavy loop); iterate with plain `go test ./internal/sim/` (<1 s) and let `make test` do the race run.
 
@@ -42,7 +47,14 @@ Breaking-change check locally: `./bin/buf breaking --against '.git#branch=main'`
 
 CI (`.github/workflows/ci.yml`) runs buf lint/format (+breaking on PRs), golangci-lint, `go test -race`, `docker compose config`, and a per-service Docker build matrix (build only, no push). Tool versions come from `.versions.env`. When you add a Makefile target, update this section.
 
-Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/compose/docker-compose.yml` (the Makefile adds it). `docker compose down -v` wipes both the sumpnet and chirpstack databases — they share one Postgres.
+Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/compose/docker-compose.yml` (the Makefile adds it). `docker compose down -v` wipes both the sumpnet and chirpstack databases — they share one Postgres. A one-shot `migrate` service applies `migrations/` before `ingest` starts; `ingest` also refuses to start on a stale schema.
+
+## Ingest path invariants
+
+- Every telemetry table's PRIMARY KEY is `(device_id, <event time>, f_cnt)`; that key is the idempotency contract and includes the partition column. Bridges store the **event** time (ChirpStack `time` / envelope `t`), never receive time (a counted fallback only).
+- `internal/store` bulk inserts go COPY → temp staging table → `INSERT … ON CONFLICT DO NOTHING`; the Go column lists in `rows.go` must match the schema (an integration test checks). New months are created on demand for replays.
+- A bridge acknowledges an MQTT message only after ingest confirms the batch; a flush failure is fatal so the broker redelivers. Poison messages (undecodable) are acknowledged and counted in `sumpnet_bridge_drops_total{reason}`.
+- Unknown DevEUIs are auto-registered with `home_id NULL` (invisible to owner views/aggregates) unless `INGEST_AUTO_REGISTER=false`.
 
 ## Architecture
 

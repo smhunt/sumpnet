@@ -220,10 +220,10 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** simulator replays a 50 mm storm for 60 homes at 60× speed, deterministic with a seed.
 
 ### Phase 2 — Ingest path
-- [ ] `lora-bridge` (ChirpStack MQTT integration → decode → gRPC stream to ingest)
-- [ ] `mqtt-bridge` for ESP32 Wi-Fi nodes publishing the codec bytes in the `sumpnet/v1/{dev_eui}/up` envelope (§5)
-- [ ] `ingest` service + migrations + sqlc queries, idempotent on (device_id, ts, fcnt)
-- [ ] Backpressure: bounded channels, batch inserts via `pgx.CopyFrom`
+- [x] `lora-bridge` (ChirpStack MQTT integration → decode → gRPC stream to ingest)
+- [x] `mqtt-bridge` for ESP32 Wi-Fi nodes publishing the codec bytes in the `sumpnet/v1/{dev_eui}/up` envelope (§5)
+- [x] `ingest` service + migrations + sqlc queries, idempotent on (device_id, ts, fcnt)
+- [x] Backpressure: bounded channels, batch inserts via `pgx.CopyFrom`
 - **Accept:** integration test (testcontainers) ingests a full simulated storm with zero loss and no duplicates.
 
 ### Phase 3 — Cycle detection + alerts
