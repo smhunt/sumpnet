@@ -255,6 +255,60 @@ func (q *Queries) PollReadings(ctx context.Context, arg PollReadingsParams) ([]R
 	return items, nil
 }
 
+const pollStormSummaries = `-- name: PollStormSummaries :many
+WITH bound AS (
+  SELECT max(inserted_at) AS hi FROM (
+    SELECT DISTINCT inserted_at FROM storm_summaries
+    WHERE inserted_at > $1 AND inserted_at <= now() - make_interval(secs => $2::float8)
+    ORDER BY inserted_at LIMIT $3
+  ) g
+)
+SELECT s.device_id, s.window_end, s.f_cnt, s.window_s, s.cycle_count, s.total_run_s, s.max_peak_current_a, s.min_level_mm, s.rssi_dbm, s.snr_db, s.sf, s.gateway_id, s.dedup_id, s.inserted_at FROM storm_summaries s, bound
+WHERE s.inserted_at > $1 AND s.inserted_at <= bound.hi
+ORDER BY s.inserted_at, s.device_id, s.window_end, s.f_cnt
+`
+
+type PollStormSummariesParams struct {
+	After      time.Time
+	LagSeconds float64
+	MaxGroups  int32
+}
+
+func (q *Queries) PollStormSummaries(ctx context.Context, arg PollStormSummariesParams) ([]StormSummary, error) {
+	rows, err := q.db.Query(ctx, pollStormSummaries, arg.After, arg.LagSeconds, arg.MaxGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StormSummary{}
+	for rows.Next() {
+		var i StormSummary
+		if err := rows.Scan(
+			&i.DeviceID,
+			&i.WindowEnd,
+			&i.FCnt,
+			&i.WindowS,
+			&i.CycleCount,
+			&i.TotalRunS,
+			&i.MaxPeakCurrentA,
+			&i.MinLevelMm,
+			&i.RssiDbm,
+			&i.SnrDb,
+			&i.Sf,
+			&i.GatewayID,
+			&i.DedupID,
+			&i.InsertedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setWatermark = `-- name: SetWatermark :exec
 INSERT INTO consumer_watermarks (consumer, source, inserted_at)
 VALUES ($1, $2, $3)

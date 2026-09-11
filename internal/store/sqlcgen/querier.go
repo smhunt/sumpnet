@@ -6,6 +6,7 @@ package sqlcgen
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,7 +34,8 @@ type Querier interface {
 	// The newest inserted_at a poller may read: now() minus the lag that covers
 	// in-flight ingest transactions. Computed in SQL so only the DB clock matters.
 	LagBoundary(ctx context.Context, lagSeconds float64) (time.Time, error)
-	LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (time.Time, error)
+	// Most recent successful raise notification for (device, code); no row = never.
+	LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (sql.NullTime, error)
 	LinkDevice(ctx context.Context, arg LinkDeviceParams) error
 	ListActiveAlerts(ctx context.Context, arg ListActiveAlertsParams) ([]ListActiveAlertsRow, error)
 	ListAlertsForDevice(ctx context.Context, deviceID string) ([]Alert, error)
@@ -55,12 +57,15 @@ type Querier interface {
 	PollCycleEvents(ctx context.Context, arg PollCycleEventsParams) ([]CycleEvent, error)
 	PollDetections(ctx context.Context, arg PollDetectionsParams) ([]Detection, error)
 	PollReadings(ctx context.Context, arg PollReadingsParams) ([]Reading, error)
+	PollStormSummaries(ctx context.Context, arg PollStormSummariesParams) ([]StormSummary, error)
 	// Backfill after an operator links a device to a home with a pit area.
 	RecomputeCycleVolumes(ctx context.Context, devEui string) (int64, error)
 	ResolveOpenAlert(ctx context.Context, arg ResolveOpenAlertParams) (Alert, error)
 	SetCycleVolume(ctx context.Context, arg []SetCycleVolumeParams) *SetCycleVolumeBatchResults
 	SetWatermark(ctx context.Context, arg SetWatermarkParams) error
 	SumStormSummaryCycles(ctx context.Context) (int64, error)
+	// Sources are consumed at different watermark positions, so the same episode
+	// can be observed out of event-time order: raised_at is the earliest trigger.
 	TouchAlert(ctx context.Context, arg TouchAlertParams) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
 	UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, error)

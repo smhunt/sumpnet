@@ -9,21 +9,27 @@ VALUES (@device_id, @home_id, @code, @severity, @raised_at, @raised_at, @message
 RETURNING *;
 
 -- name: TouchAlert :exec
+-- Sources are consumed at different watermark positions, so the same episode
+-- can be observed out of event-time order: raised_at is the earliest trigger.
 UPDATE alerts
-SET last_seen_at = GREATEST(last_seen_at, $2), occurrences = occurrences + 1, updated_at = now()
-WHERE id = $1;
+SET raised_at = LEAST(raised_at, @seen_at), last_seen_at = GREATEST(last_seen_at, @seen_at),
+    occurrences = occurrences + 1, updated_at = now()
+WHERE id = @id;
 
 -- name: ResolveOpenAlert :one
 UPDATE alerts
 SET resolved_at = @resolved_at, resolve_reason = @resolve_reason,
-    resolve_notify_state = CASE WHEN @notify_resolve::boolean AND notify_state = 'sent' THEN 'pending' ELSE 'none' END,
+    resolve_notify_state = CASE WHEN @notify_resolve::boolean AND notify_state IN ('sent', 'pending') THEN 'pending' ELSE 'none' END,
     updated_at = now()
 WHERE device_id = @device_id AND code = @code AND resolved_at IS NULL
+  AND raised_at <= @resolved_at -- a stale row from a lagging source cannot resolve a newer episode
 RETURNING *;
 
 -- name: LastNotifiedAt :one
-SELECT max(notified_at)::timestamptz AS notified_at
-FROM alerts WHERE device_id = $1 AND code = $2 AND notify_state = 'sent';
+-- Most recent successful raise notification for (device, code); no row = never.
+SELECT notified_at FROM alerts
+WHERE device_id = $1 AND code = $2 AND notify_state = 'sent' AND notified_at IS NOT NULL
+ORDER BY notified_at DESC LIMIT 1;
 
 -- name: ListPendingRaiseNotifications :many
 SELECT sqlc.embed(a), h.segment_id

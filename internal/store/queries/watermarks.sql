@@ -63,3 +63,15 @@ WITH bound AS (
 SELECT d.* FROM detections d, bound
 WHERE d.inserted_at > @after AND d.inserted_at <= bound.hi
 ORDER BY d.inserted_at, d.device_id, d.observed_at, d.f_cnt;
+
+-- name: PollStormSummaries :many
+WITH bound AS (
+  SELECT max(inserted_at) AS hi FROM (
+    SELECT DISTINCT inserted_at FROM storm_summaries
+    WHERE inserted_at > @after AND inserted_at <= now() - make_interval(secs => @lag_seconds::float8)
+    ORDER BY inserted_at LIMIT @max_groups
+  ) g
+)
+SELECT s.* FROM storm_summaries s, bound
+WHERE s.inserted_at > @after AND s.inserted_at <= bound.hi
+ORDER BY s.inserted_at, s.device_id, s.window_end, s.f_cnt;

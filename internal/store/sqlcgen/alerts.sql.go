@@ -228,8 +228,9 @@ func (q *Queries) InsertAlert(ctx context.Context, arg InsertAlertParams) (Alert
 }
 
 const lastNotifiedAt = `-- name: LastNotifiedAt :one
-SELECT max(notified_at)::timestamptz AS notified_at
-FROM alerts WHERE device_id = $1 AND code = $2 AND notify_state = 'sent'
+SELECT notified_at FROM alerts
+WHERE device_id = $1 AND code = $2 AND notify_state = 'sent' AND notified_at IS NOT NULL
+ORDER BY notified_at DESC LIMIT 1
 `
 
 type LastNotifiedAtParams struct {
@@ -237,9 +238,10 @@ type LastNotifiedAtParams struct {
 	Code     int16
 }
 
-func (q *Queries) LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (time.Time, error) {
+// Most recent successful raise notification for (device, code); no row = never.
+func (q *Queries) LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (sql.NullTime, error) {
 	row := q.db.QueryRow(ctx, lastNotifiedAt, arg.DeviceID, arg.Code)
-	var notified_at time.Time
+	var notified_at sql.NullTime
 	err := row.Scan(&notified_at)
 	return notified_at, err
 }
@@ -558,9 +560,10 @@ func (q *Queries) MarkResolveNotification(ctx context.Context, arg MarkResolveNo
 const resolveOpenAlert = `-- name: ResolveOpenAlert :one
 UPDATE alerts
 SET resolved_at = $1, resolve_reason = $2,
-    resolve_notify_state = CASE WHEN $3::boolean AND notify_state = 'sent' THEN 'pending' ELSE 'none' END,
+    resolve_notify_state = CASE WHEN $3::boolean AND notify_state IN ('sent', 'pending') THEN 'pending' ELSE 'none' END,
     updated_at = now()
 WHERE device_id = $4 AND code = $5 AND resolved_at IS NULL
+  AND raised_at <= $1 -- a stale row from a lagging source cannot resolve a newer episode
 RETURNING id, device_id, home_id, code, severity, raised_at, last_seen_at, occurrences, acked_at, ack_note, resolved_at, resolve_reason, message, source, trigger_key, notify_state, notify_attempts, notified_at, resolve_notify_state, resolve_notify_attempts, updated_at, inserted_at
 `
 
@@ -610,16 +613,19 @@ func (q *Queries) ResolveOpenAlert(ctx context.Context, arg ResolveOpenAlertPara
 
 const touchAlert = `-- name: TouchAlert :exec
 UPDATE alerts
-SET last_seen_at = GREATEST(last_seen_at, $2), occurrences = occurrences + 1, updated_at = now()
-WHERE id = $1
+SET raised_at = LEAST(raised_at, $1), last_seen_at = GREATEST(last_seen_at, $1),
+    occurrences = occurrences + 1, updated_at = now()
+WHERE id = $2
 `
 
 type TouchAlertParams struct {
-	ID         uuid.UUID
-	LastSeenAt time.Time
+	SeenAt time.Time
+	ID     uuid.UUID
 }
 
+// Sources are consumed at different watermark positions, so the same episode
+// can be observed out of event-time order: raised_at is the earliest trigger.
 func (q *Queries) TouchAlert(ctx context.Context, arg TouchAlertParams) error {
-	_, err := q.db.Exec(ctx, touchAlert, arg.ID, arg.LastSeenAt)
+	_, err := q.db.Exec(ctx, touchAlert, arg.SeenAt, arg.ID)
 	return err
 }
