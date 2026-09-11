@@ -14,7 +14,7 @@ import (
 )
 
 const getDevicePitArea = `-- name: GetDevicePitArea :one
-SELECT d.dev_eui, d.home_id, h.pit_area_m2::float8 AS pit_area_m2, h.segment_id
+SELECT d.dev_eui, d.home_id, coalesce(h.pit_area_m2, 0)::float8 AS pit_area_m2, h.segment_id
 FROM devices d
 LEFT JOIN homes h ON h.id = d.home_id
 WHERE d.dev_eui = $1
