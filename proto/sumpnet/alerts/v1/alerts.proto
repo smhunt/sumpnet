@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package sumpnet.alerts.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/alerts/v1;alertsv1";
+
+// AlertService lists and acknowledges alerts. Per-home alerts are only
+// visible to the home's owner; segment-level listing applies the same
+// k >= 3 aggregation rules as QueryService.
+service AlertService {
+  rpc ListActiveAlerts(ListActiveAlertsRequest) returns (ListActiveAlertsResponse) {
+    option (google.api.http) = {get: "/v1/alerts"};
+  }
+  rpc Acknowledge(AcknowledgeRequest) returns (AcknowledgeResponse) {
+    option (google.api.http) = {
+      post: "/v1/alerts/{alert_id}:acknowledge"
+      body: "*"
+    };
+  }
+}
+
+// AlertCode: 1-5 mirror telemetry.v1.AlarmCode (raised by the node);
+// 6-9 are derived by cycle-detector / alerts from the data stream.
+enum AlertCode {
+  ALERT_CODE_UNSPECIFIED = 0;
+  ALERT_CODE_FLOAT_HIGH = 1;
+  ALERT_CODE_MAINS_LOST = 2;
+  ALERT_CODE_DRY_RUN = 3;
+  ALERT_CODE_CONTINUOUS_RUN = 4;
+  ALERT_CODE_SENSOR_FAULT = 5;
+  ALERT_CODE_SHORT_CYCLING = 6;
+  ALERT_CODE_OUTAGE_RISK = 7;
+  ALERT_CODE_LOW_BATTERY = 8;
+  ALERT_CODE_OFFLINE = 9;
+}
+
+enum AlertSeverity {
+  ALERT_SEVERITY_UNSPECIFIED = 0;
+  ALERT_SEVERITY_INFO = 1;
+  ALERT_SEVERITY_WARNING = 2;
+  ALERT_SEVERITY_CRITICAL = 3;
+}
+
+message Alert {
+  string id = 1;
+  string home_id = 2;
+  string segment_id = 3;
+  AlertCode code = 4;
+  AlertSeverity severity = 5;
+  google.protobuf.Timestamp raised_at = 6;
+  google.protobuf.Timestamp acked_at = 7;
+  google.protobuf.Timestamp resolved_at = 8;
+  string message = 9;
+}
+
+message ListActiveAlertsRequest {
+  // At most one of home_id / segment_id; both empty lists everything the
+  // caller is allowed to see.
+  string home_id = 1;
+  string segment_id = 2;
+}
+
+message ListActiveAlertsResponse {
+  repeated Alert alerts = 1;
+}
+
+message AcknowledgeRequest {
+  string alert_id = 1;
+  string note = 2;
+}
+
+message AcknowledgeResponse {
+  Alert alert = 1;
+}

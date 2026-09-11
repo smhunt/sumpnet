@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package sumpnet.query.v1;
+
+import "google/api/annotations.proto";
+import "google/protobuf/timestamp.proto";
+import "sumpnet/alerts/v1/alerts.proto";
+
+option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/query/v1;queryv1";
+
+// QueryService is the read API used by the dashboard and the MCP server.
+// Privacy rules (prompt_plan.md §2) are enforced here, not by callers:
+// per-home data is owner-scoped and segment aggregates are suppressed when
+// fewer than 3 homes report.
+service QueryService {
+  // GetHome is owner-scoped: a caller only ever sees their own home.
+  rpc GetHome(GetHomeRequest) returns (GetHomeResponse) {
+    option (google.api.http) = {get: "/v1/homes/{home_id}"};
+  }
+  rpc ListStormEvents(ListStormEventsRequest) returns (ListStormEventsResponse) {
+    option (google.api.http) = {get: "/v1/storm-events"};
+  }
+  // GetStormEvent returns segment aggregates only, never per-home metrics.
+  rpc GetStormEvent(GetStormEventRequest) returns (GetStormEventResponse) {
+    option (google.api.http) = {get: "/v1/storm-events/{storm_id}"};
+  }
+  // WatchNeighbourhood streams live segment status, storm events and alerts.
+  // Over REST (grpc-gateway) this is newline-delimited JSON.
+  rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream WatchNeighbourhoodResponse) {
+    option (google.api.http) = {get: "/v1/neighbourhood:watch"};
+  }
+}
+
+// SegmentKind is what the simulator's load multipliers key on and what the
+// "does load correlate with wooded lots / distance to the pond" question needs.
+enum SegmentKind {
+  SEGMENT_KIND_UNSPECIFIED = 0;
+  SEGMENT_KIND_STANDARD = 1;
+  SEGMENT_KIND_WOODED = 2;
+  SEGMENT_KIND_NEAR_POND = 3;
+  SEGMENT_KIND_HIGH_GROUND = 4;
+}
+
+message Segment {
+  string id = 1;
+  string name = 2;
+  // Street-segment polygon as a GeoJSON geometry string.
+  string geometry_geojson = 3;
+  uint32 home_count = 4;
+  SegmentKind kind = 5;
+}
+
+message Device {
+  string dev_eui = 1;
+  string kind = 2;
+  google.protobuf.Timestamp installed_at = 3;
+}
+
+message HomeHealth {
+  google.protobuf.Timestamp last_seen = 1;
+  uint32 batt_mv = 2;
+  bool mains_ok = 3;
+  double baseflow_cycles_per_day = 4;
+  uint32 active_alerts = 5;
+}
+
+// Home never carries owner contact details; those stay encrypted in the store.
+message Home {
+  string id = 1;
+  string segment_id = 2;
+  double pit_area_m2 = 3;
+  google.protobuf.Timestamp consent_at = 4;
+  repeated Device devices = 5;
+  HomeHealth health = 6;
+}
+
+message StormEvent {
+  string id = 1;
+  google.protobuf.Timestamp started_at = 2;
+  google.protobuf.Timestamp ended_at = 3;
+  double total_rain_mm = 4;
+  double peak_intensity_mm_h = 5;
+}
+
+message HomeStormMetrics {
+  string storm_id = 1;
+  string home_id = 2;
+  double lag_min = 3;
+  double recession_min = 4;
+  double volume_l = 5;
+  uint32 cycles = 6;
+}
+
+// SegmentStormMetrics is the public, aggregated view. When homes_reporting
+// < 3 the numeric fields are zero and suppressed is true.
+message SegmentStormMetrics {
+  string storm_id = 1;
+  string segment_id = 2;
+  uint32 homes_reporting = 3;
+  bool suppressed = 4;
+  double load_l_per_home = 5;
+  double median_lag_min = 6;
+  double median_recession_min = 7;
+}
+
+message SegmentStatus {
+  string segment_id = 1;
+  uint32 homes_reporting = 2;
+  bool suppressed = 3;
+  double cycles_per_hour = 4;
+  uint32 active_alerts = 5;
+}
+
+message NeighbourhoodUpdate {
+  google.protobuf.Timestamp ts = 1;
+  oneof update {
+    SegmentStatus segment_status = 2;
+    StormEvent storm_event = 3;
+    sumpnet.alerts.v1.Alert alert = 4;
+  }
+}
+
+message GetHomeRequest {
+  string home_id = 1;
+}
+
+message GetHomeResponse {
+  Home home = 1;
+  repeated HomeStormMetrics recent_storms = 2;
+}
+
+message ListStormEventsRequest {
+  google.protobuf.Timestamp since = 1;
+  google.protobuf.Timestamp until = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListStormEventsResponse {
+  repeated StormEvent storm_events = 1;
+  string next_page_token = 2;
+}
+
+message GetStormEventRequest {
+  string storm_id = 1;
+}
+
+message GetStormEventResponse {
+  StormEvent storm_event = 1;
+  repeated SegmentStormMetrics segments = 2;
+}
+
+message WatchNeighbourhoodRequest {
+  // Empty means all segments.
+  repeated string segment_ids = 1;
+  // Send the current state of each segment before live updates.
+  bool send_snapshot = 2;
+}
+
+message WatchNeighbourhoodResponse {
+  NeighbourhoodUpdate update = 1;
+}

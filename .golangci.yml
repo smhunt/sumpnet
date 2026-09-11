@@ -25,11 +25,6 @@ linters:
         - name: context-as-argument
         - name: error-strings
         - name: unused-parameter
-    gosec:
-      excludes:
-        # Integer overflow conversions; re-enable in Phase 1 once the codec
-        # exists and can be proven clean.
-        - G115
   exclusions:
     generated: lax
     paths:
@@ -38,6 +33,12 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+      # The simulator clamps every narrowing conversion explicitly (min/max);
+      # G115 would need a nolint on nearly every line of the node emulation.
+      - path: internal/sim/
+        linters:
+          - gosec
+        text: G115
 
 formatters:
   enable:

@@ -2,7 +2,131 @@ syntax = "proto3";
 
 package sumpnet.telemetry.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1;telemetryv1";
 
-// Phase 1 fills in IngestService (prompt_plan.md §8). This file exists so that
-// buf build/lint/breaking/generate run unguarded from Phase 0 onward.
+// IngestService receives decoded uplinks from the bridges (lora-bridge for
+// ChirpStack, mqtt-bridge for the legacy Photon node). Messages carry SI units
+// and enums; the byte-level wire encoding lives in internal/codec and the
+// bridge converts between the two. Internal only: no HTTP bindings.
+service IngestService {
+  rpc SubmitReadings(stream SubmitReadingsRequest) returns (SubmitReadingsResponse);
+  // Storm summaries (fPort 4) ride alongside cycle events because they are
+  // cycle aggregates the node rolled up in storm mode.
+  rpc SubmitCycleEvents(stream SubmitCycleEventsRequest) returns (SubmitCycleEventsResponse);
+  rpc SubmitAlarms(stream SubmitAlarmsRequest) returns (SubmitAlarmsResponse);
+}
+
+// UplinkMeta identifies the LoRaWAN frame a message was decoded from.
+// (dev_eui, received_at, f_cnt) is the ingest idempotency key.
+message UplinkMeta {
+  string dev_eui = 1;
+  uint32 f_cnt = 2;
+  google.protobuf.Timestamp received_at = 3;
+  string deduplication_id = 4;
+  int32 rssi_dbm = 5;
+  float snr_db = 6;
+  uint32 spreading_factor = 7;
+  string gateway_id = 8;
+}
+
+// ReadingFlags is the expanded fPort 1 flags byte.
+message ReadingFlags {
+  bool mains_ok = 1;
+  bool float_high = 2;
+  bool backup_ran = 3;
+  bool sensor_fault = 4;
+}
+
+// Reading is a periodic heartbeat (fPort 1, every 15 min).
+message Reading {
+  UplinkMeta meta = 1;
+  google.protobuf.Timestamp ts = 2;
+  // Distance from the ultrasonic sensor to the water surface; smaller = higher water.
+  uint32 level_mm = 3;
+  double temp_c = 4;
+  uint32 rh_pct = 5;
+  uint32 batt_mv = 6;
+  uint32 cycles_since_last = 7;
+  ReadingFlags flags = 8;
+}
+
+enum PumpId {
+  PUMP_ID_UNSPECIFIED = 0;
+  PUMP_ID_PRIMARY = 1;
+  PUMP_ID_BACKUP = 2;
+}
+
+// CycleEvent is one pump run (fPort 2). Estimated volume is derived later by
+// cycle-detector from the home's pit area and is deliberately not carried here.
+message CycleEvent {
+  UplinkMeta meta = 1;
+  google.protobuf.Timestamp started_at = 2;
+  uint32 run_s = 3;
+  double peak_current_a = 4;
+  uint32 level_start_mm = 5;
+  uint32 level_end_mm = 6;
+  PumpId pump_id = 7;
+}
+
+// AlarmCode values equal the fPort 3 wire codes (prompt_plan.md §5).
+enum AlarmCode {
+  ALARM_CODE_UNSPECIFIED = 0;
+  ALARM_CODE_FLOAT_HIGH = 1;
+  ALARM_CODE_MAINS_LOST = 2;
+  ALARM_CODE_DRY_RUN = 3;
+  ALARM_CODE_CONTINUOUS_RUN = 4;
+  ALARM_CODE_SENSOR_FAULT = 5;
+}
+
+// Alarm is a confirmed, immediate uplink (fPort 3).
+message Alarm {
+  UplinkMeta meta = 1;
+  google.protobuf.Timestamp raised_at = 2;
+  AlarmCode code = 3;
+  // Code-dependent: level_mm for FLOAT_HIGH, batt_mv for MAINS_LOST,
+  // run_s for DRY_RUN / CONTINUOUS_RUN, raw sensor code for SENSOR_FAULT.
+  uint32 value = 4;
+}
+
+// StormSummary aggregates cycles the node rolled up in storm mode (fPort 4)
+// to protect airtime when more than 6 cycles occur within 15 minutes.
+message StormSummary {
+  UplinkMeta meta = 1;
+  google.protobuf.Timestamp window_end = 2;
+  uint32 window_s = 3;
+  uint32 count = 4;
+  uint32 total_run_s = 5;
+  double max_peak_current_a = 6;
+  // Minimum sensor distance in the window, i.e. the highest water reached.
+  uint32 min_level_mm = 7;
+}
+
+message SubmitReadingsRequest {
+  repeated Reading readings = 1;
+}
+
+message SubmitReadingsResponse {
+  uint32 accepted = 1;
+  uint32 duplicates = 2;
+}
+
+message SubmitCycleEventsRequest {
+  repeated CycleEvent cycle_events = 1;
+  repeated StormSummary storm_summaries = 2;
+}
+
+message SubmitCycleEventsResponse {
+  uint32 accepted = 1;
+  uint32 duplicates = 2;
+}
+
+message SubmitAlarmsRequest {
+  repeated Alarm alarms = 1;
+}
+
+message SubmitAlarmsResponse {
+  uint32 accepted = 1;
+  uint32 duplicates = 2;
+}

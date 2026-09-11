@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test build up down logs ps env clean
+.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean
 
 all: lint test
 
@@ -37,14 +37,31 @@ proto: $(BUF)
 ## lint: buf lint + golangci-lint (linters and formatters)
 lint: $(BUF) $(GOLANGCI)
 	$(BUF) lint
+	$(BUF) format --diff --exit-code
 	$(GOLANGCI) run ./...
 	$(GOLANGCI) fmt --diff ./...
 
-fmt: $(GOLANGCI)
+fmt: $(BUF) $(GOLANGCI)
+	$(BUF) format -w
 	$(GOLANGCI) fmt ./...
 
 test:
 	go test -race -count=1 -cover ./...
+
+## test-integration: tests behind the integration build tag (need Docker; testcontainers)
+test-integration:
+	go test -race -count=1 -tags integration ./...
+
+## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES)
+SCENARIO ?= storm50
+SEED     ?= 42
+SPEED    ?= 60
+HOMES    ?= 60
+sim: env
+	@mkdir -p loadtest/results
+	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) -homes $(HOMES) \
+	  -sink mqtt -mqtt-url mqtt://localhost:$$(grep '^MQTT_PORT=' deploy/compose/.env | cut -d= -f2) \
+	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED).json -hash
 
 ## build: build every service image via compose
 build: env

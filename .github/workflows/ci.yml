@@ -42,8 +42,10 @@ jobs:
           breaking: ${{ github.event_name == 'pull_request' }}
           push: false
           archive: false
-      - name: Generate (proves the pinned remote plugins resolve)
-        run: buf generate
+      - name: Generated code is up to date
+        run: |
+          buf generate
+          git diff --exit-code -- gen/ || { echo '::error::gen/ is stale — run make proto and commit'; exit 1; }
 
   lint:
     needs: versions
@@ -69,6 +71,15 @@ jobs:
       - run: go mod verify
       - run: go build ./...
       - run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+  test-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test -race -count=1 -tags integration ./...
 
   compose-config:
     runs-on: ubuntu-latest

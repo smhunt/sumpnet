@@ -27,8 +27,10 @@ web/dist/
 # Claude local settings
 .claude/settings.local.json
 
-# Generated protobuf code (Phase 0: generated locally; Phase 1 ADR decides whether to commit)
-gen/
+# gen/go is committed (docs/adr/0002-generated-code.md); CI fails if it is stale.
 
 # Compose bind-mounted data
 deploy/compose/data/
+
+# Simulator ground-truth exports (the stream hash is recorded in progress.md)
+loadtest/results/*.json
