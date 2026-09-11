@@ -44,4 +44,6 @@
     # JSON envelope; the Go lora-bridge decodes the base64 `data` field with
     # internal/codec (prompt_plan.md §5). No JS codecs in ChirpStack.
     json=true
+    # At-least-once to the bridge; the database key makes it exactly-once.
+    qos=1
     event_topic="application/{{application_id}}/device/{{dev_eui}}/event/{{event}}"

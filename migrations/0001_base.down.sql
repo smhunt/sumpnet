@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS alarm_events;
+DROP TABLE IF EXISTS storm_summaries;
+DROP TABLE IF EXISTS cycle_events;
+DROP TABLE IF EXISTS readings;
+DROP TABLE IF EXISTS devices;
+DROP TABLE IF EXISTS homes;
+DROP TABLE IF EXISTS segments;
+DROP TYPE IF EXISTS pump_kind;
