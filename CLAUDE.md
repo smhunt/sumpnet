@@ -48,7 +48,7 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 
 ```
 LoRa house/rain nodes -> LoRaWAN gateways -> ChirpStack v4 --MQTT--> lora-bridge --┐
-Existing Photon (WiFi) ------------------------> Mosquitto --> mqtt-bridge ---------┼--gRPC stream--> ingest -> Postgres 16
+ESP32 Wi-Fi nodes (dev) -----------------------> Mosquitto --> mqtt-bridge ---------┼--gRPC stream--> ingest -> Postgres 16
                                                                                     │
 cycle-detector, storm-analytics, weather, alerts  <-- Postgres LISTEN/NOTIFY --------┘
 api-gateway (gRPC + grpc-gateway REST + WatchNeighbourhood stream) -> React/TS + MapLibre dashboard
@@ -63,7 +63,7 @@ mcp-server -> QueryService (never direct SQL)
 
 ## Invariants that span multiple components
 
-- **Payload decoding happens only in Go (`internal/codec`)**, never in ChirpStack JS codecs. Uplinks are binary and little-endian: fPort 1 heartbeat (10 B), 2 pump cycle (11 B), 3 alarm (3 B, confirmed), 4 storm-mode summary. The exact layouts are in §5 of the plan. Firmware (`firmware/`, PlatformIO on RAK4631) must encode byte-for-byte what the codec decodes. Keep golden byte-vector table tests as the shared contract, and change them together with firmware.
+- **Payload decoding happens only in Go (`internal/codec`)**, never in ChirpStack JS codecs. Uplinks are binary and little-endian: fPort 1 heartbeat (10 B), 2 pump cycle (11 B), 3 alarm (3 B, confirmed), 4 storm-mode summary. The exact layouts are in §5 of the plan. Firmware (`firmware/`, PlatformIO on ESP32-S3 + SX1262) must encode byte-for-byte what the codec decodes, over LoRaWAN or the Wi-Fi/MQTT envelope in `docs/node-mqtt.md`. Keep golden byte-vector table tests as the shared contract, and change them together with firmware.
 - **Ingest is idempotent** on `(device_id, ts, fcnt)`. It uses bounded channels for backpressure and batches inserts with `pgx.CopyFrom`.
 - **Privacy:** data is opt-in, device IDs are pseudonymous, per-house data is visible only to its owner, and public views aggregate to street segments only when **≥ 3 homes** report. `internal/privacy` enforces this. The API gateway and MCP server must both go through it (MCP reads via QueryService).
 - **Analytics are pure functions** in `internal/hydrology`, with thresholds defined in §10 of the plan (cycle, dry run, short cycling, continuous run, baseflow, storm event, lag, recession, segment load, outage risk). Use those definitions exactly. If you change one, change the plan too.
@@ -97,4 +97,4 @@ Registered in `~/.claude/PORTS.md` under `### sumpnet` and set in `deploy/compos
 | Web dashboard (Phase 5) | 3034 | `WEB_PORT` |
 | Postgres 16 + pg_partman | 5444 | `POSTGRES_PORT` |
 
-Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (where the existing Photon node publishes — `mqtt-bridge` subscribes to it in Phase 2); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. HTTPS via `dev.ecoworks.ca:<port>` is deferred to Phase 5; Phase 0/1 endpoints are plain HTTP on localhost.
+Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (pool equipment; nothing sumpnet-related publishes there); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. HTTPS via `dev.ecoworks.ca:<port>` is deferred to Phase 5; Phase 0/1 endpoints are plain HTTP on localhost.

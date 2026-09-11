@@ -14,7 +14,7 @@ Pilot neighbourhood: Timberwalk, Ilderton (Middlesex Centre, ON). Working plan a
 House nodes (LoRa 915 MHz) ─┐
 Rain / groundwater nodes  ──┼─> LoRaWAN gateways ×2 ─> ChirpStack v4 ─┐
                             │                                         │ MQTT integration events
-Existing Photon (WiFi) ─────┴────────────────────────> Mosquitto ─────┤
+ESP32 Wi-Fi nodes (dev) ────┴────────────────────────> Mosquitto ─────┤
                                                                       v
                                    ┌──────────── Go services (gRPC) ────────────┐
                                    │ lora-bridge  mqtt-bridge  ->  ingest       │
