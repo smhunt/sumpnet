@@ -3,6 +3,7 @@ module github.com/smhunt/sumpnet
 go 1.26.0
 
 require (
+	github.com/chirpstack/chirpstack/api/go/v4 v4.19.1
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0
 	github.com/prometheus/client_golang v1.24.1
 	golang.org/x/sync v0.23.0
