@@ -183,6 +183,11 @@ func (h *Handler) Handle(ctx context.Context, tx pgx.Tx, q *sqlcgen.Queries, row
 			return batchErr
 		}
 	}
+	return h.writeDetections(ctx, tx, q, dets)
+}
+
+// writeDetections inserts detections idempotently and announces them.
+func (h *Handler) writeDetections(ctx context.Context, tx pgx.Tx, q *sqlcgen.Queries, dets []detection) error {
 	inserted := 0
 	for _, d := range dets {
 		detail, _ := json.Marshal(d.detail)
@@ -321,6 +326,48 @@ func (h *Handler) seed(ctx context.Context, q *sqlcgen.Queries, dev, pump string
 	return nil
 }
 
+// summaryHandler is the storm_summaries stage; it shares the Handler's state.
+type summaryHandler struct{ h *Handler }
+
+// Handle applies the summary form of short cycling (hydrology.SummaryShortCycling).
+func (s *summaryHandler) Handle(ctx context.Context, tx pgx.Tx, q *sqlcgen.Queries, rows []sqlcgen.StormSummary) error {
+	h := s.h
+	var dets []detection
+	for _, r := range rows {
+		key := condKey{r.DeviceID, alertsv1.AlertCode_ALERT_CODE_SHORT_CYCLING}
+		short := hydrology.SummaryShortCycling(r.CycleCount, r.WindowS)
+		detail := map[string]any{"cycle_count": r.CycleCount, "window_s": r.WindowS}
+		switch {
+		case short && !h.active[key]:
+			h.active[key] = true
+			h.healthy[key] = 0
+			dets = append(dets, detection{r.DeviceID, key.code, ActionRaise, r.WindowEnd, r.FCnt, detail})
+		case short:
+			h.healthy[key] = 0
+		case !short && h.active[key]:
+			h.healthy[key]++
+			if h.healthy[key] >= h.cfg.HealthyCyclesToClear {
+				h.active[key] = false
+				dets = append(dets, detection{r.DeviceID, key.code, ActionClear, r.WindowEnd, r.FCnt, detail})
+			}
+		}
+		h.m.Cycles.WithLabelValues("summarised").Add(float64(r.CycleCount))
+	}
+	return h.writeDetections(ctx, tx, q, dets)
+}
+
+// Reset defers to the shared handler.
+func (s *summaryHandler) Reset() { s.h.Reset() }
+
+// SummarySource is the watermark source for storm_summaries.
+var SummarySource = watermark.Source[sqlcgen.StormSummary]{
+	Table: "storm_summaries",
+	Poll: func(ctx context.Context, q *sqlcgen.Queries, after time.Time, lag float64, maxGroups int32) ([]sqlcgen.StormSummary, error) {
+		return q.PollStormSummaries(ctx, sqlcgen.PollStormSummariesParams{After: after, LagSeconds: lag, MaxGroups: maxGroups})
+	},
+	InsertedAt: func(s sqlcgen.StormSummary) time.Time { return s.InsertedAt },
+}
+
 // Source is the watermark source for cycle_events.
 var Source = watermark.Source[sqlcgen.CycleEvent]{
 	Table: "cycle_events",
@@ -328,6 +375,12 @@ var Source = watermark.Source[sqlcgen.CycleEvent]{
 		return q.PollCycleEvents(ctx, sqlcgen.PollCycleEventsParams{After: after, LagSeconds: lag, MaxGroups: maxGroups})
 	},
 	InsertedAt: func(c sqlcgen.CycleEvent) time.Time { return c.InsertedAt },
+}
+
+// AddStages registers the cycle_events and storm_summaries stages on a consumer.
+func AddStages(c *watermark.Consumer, h *Handler) {
+	watermark.Add(c, Source, h)
+	watermark.Add(c, SummarySource, &summaryHandler{h: h})
 }
 
 // Run is the service body used by cmd/cycle-detector: it connects, verifies
@@ -343,7 +396,7 @@ func Run(ctx context.Context, app *platform.App, dsn string, cfg Config) error {
 	}
 	m := NewMetrics(app.Metrics)
 	c := watermark.New(st.Pool(), dsn, cfg.Watermark, watermark.NewMetrics(app.Metrics), app.Log)
-	watermark.Add(c, Source, NewHandler(cfg, m, app.Log))
+	AddStages(c, NewHandler(cfg, m, app.Log))
 	c.OnRound(func(int) { app.Ready.Set(true) })
 	app.Log.Info("cycle-detector running", "poll_interval", cfg.Watermark.PollInterval, "lag", cfg.Watermark.Lag)
 	return c.Run(ctx)

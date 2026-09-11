@@ -111,3 +111,23 @@ func TestLevelRising(t *testing.T) {
 		})
 	}
 }
+
+func TestSummaryShortCycling(t *testing.T) {
+	cases := []struct {
+		count, window int32
+		want          bool
+	}{
+		{15, 900, true},  // mean interval exactly 60 s
+		{14, 900, false}, // 64 s
+		{40, 900, true},
+		{4, 60, false}, // fewer than five cycles can never be short cycling
+		{5, 300, true},
+		{5, 301, false},
+		{10, 0, false},
+	}
+	for _, tc := range cases {
+		if got := SummaryShortCycling(tc.count, tc.window); got != tc.want {
+			t.Errorf("SummaryShortCycling(%d, %d) = %v, want %v", tc.count, tc.window, got, tc.want)
+		}
+	}
+}

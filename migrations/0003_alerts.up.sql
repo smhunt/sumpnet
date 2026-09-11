@@ -62,3 +62,4 @@ CREATE TABLE consumer_watermarks (
 CREATE INDEX readings_inserted_at     ON readings     (inserted_at);
 CREATE INDEX cycle_events_inserted_at ON cycle_events (inserted_at);
 CREATE INDEX alarm_events_inserted_at ON alarm_events (inserted_at);
+CREATE INDEX storm_summaries_inserted_at ON storm_summaries (inserted_at);

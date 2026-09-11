@@ -68,6 +68,14 @@ func ShortCyclingRun(sorted []Cycle) int {
 	return run
 }
 
+// SummaryShortCycling applies the short-cycling definition to a storm-mode
+// roll-up, where individual cycles are not reported: count cycles in a window
+// of windowS seconds means a mean interval of windowS/count, and at or below
+// ShortCycleGap that interval implies runs of ShortCycleMinCount close cycles.
+func SummaryShortCycling(count, windowS int32) bool {
+	return count >= int32(ShortCycleMinCount) && windowS > 0 && float64(windowS)/float64(count) <= ShortCycleGap.Seconds()
+}
+
 // EstVolumeL is §9's estimated volume per cycle: pit area × level drop
 // (m² × mm = litres). Negative drops yield negative volumes; callers decide
 // whether to store them.

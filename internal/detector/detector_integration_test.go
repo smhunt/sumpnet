@@ -57,7 +57,7 @@ func setup(t *testing.T) (*store.Store, *watermark.Consumer) {
 	cfg := Config{Watermark: watermark.Config{Consumer: "cycle-detector", Lag: 0, MaxGroups: 50, PollInterval: time.Hour}, HealthyCyclesToClear: 3, Window: 10, PitAreaTTL: time.Minute}
 	reg := prometheus.NewRegistry()
 	c := watermark.New(st.Pool(), dsn, cfg.Watermark, watermark.NewMetrics(reg), slog.New(slog.DiscardHandler))
-	watermark.Add(c, Source, NewHandler(cfg, NewMetrics(reg), slog.New(slog.DiscardHandler)))
+	AddStages(c, NewHandler(cfg, NewMetrics(reg), slog.New(slog.DiscardHandler)))
 	return st, c
 }
 
@@ -195,3 +195,29 @@ func TestShortCycling(t *testing.T) {
 }
 
 func sameDet(a, b det) bool { return a.code == b.code && a.action == b.action && a.at.Equal(b.at) }
+
+func TestStormSummaryShortCycling(t *testing.T) {
+	st, c := setup(t)
+	ctx := context.Background()
+	// Storm mode: 40 cycles in a 900 s window is a mean interval of 22 s.
+	// Two windows raise once; three quiet windows clear.
+	var rows []store.StormSummary
+	counts := []int32{40, 37, 8, 6, 3}
+	for i, n := range counts {
+		rows = append(rows, store.StormSummary{DeviceID: linked, WindowEnd: base.Add(time.Duration(i+1) * 15 * time.Minute), FCnt: int64(100 + i), WindowS: 900, CycleCount: n, TotalRunS: n * 4, MaxPeakCurrentA: 6, MinLevelMM: 300})
+	}
+	if _, err := st.InsertStormSummaries(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := detections(t, st, linked)
+	want := []det{
+		{alertsv1.AlertCode_ALERT_CODE_SHORT_CYCLING, ActionRaise, base.Add(15 * time.Minute)},
+		{alertsv1.AlertCode_ALERT_CODE_SHORT_CYCLING, ActionClear, base.Add(75 * time.Minute)},
+	}
+	if len(got) != 2 || !sameDet(got[0], want[0]) || !sameDet(got[1], want[1]) {
+		t.Fatalf("detections = %+v, want %+v", got, want)
+	}
+}
