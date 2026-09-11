@@ -203,10 +203,10 @@ Estimated volume per cycle = `pit_area_m2 × (level_end_mm − level_start_mm) /
 Each phase is sized for one to three Claude Code sessions. Do not start a phase until the previous acceptance criteria pass.
 
 ### Phase 0 — Scaffold
-- [ ] Go module, Makefile (`make proto lint test up down`), buf config
-- [ ] docker-compose: Postgres 16, Mosquitto, ChirpStack v4 (+ Redis), placeholder services
+- [x] Go module, Makefile (`make proto lint test up down`), buf config
+- [x] docker-compose: Postgres 16, Mosquitto, ChirpStack v4 (+ Redis), placeholder services
 - [ ] GitHub Actions: buf lint/breaking, golangci-lint, `go test -race`, Docker build
-- [ ] `progress.md`, `docs/adr/0001-monorepo.md`
+- [x] `progress.md`, `docs/adr/0001-monorepo.md`
 - **Accept:** `make up` brings stack up on the lab VM; CI green on empty services.
 
 ### Phase 1 — Contracts + simulator

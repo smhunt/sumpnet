@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 sumpnet is a neighbourhood sump-pump and drainage monitoring platform (pilot: Timberwalk, Ilderton, ON). It has two goals: a portfolio showcase for senior Go backend work (gRPC, microservices, AWS, CI/CD, published load-test numbers) and a real civic tool.
 
-**The repo is currently pre-code.** `prompt_plan.md` is the source of truth for architecture, payload formats, data model, analytics definitions, and the phased roadmap. Read the relevant section of it before starting work, and keep it in sync if a decision changes. The directory is not yet a git repository (Phase 0 creates it).
+`prompt_plan.md` is the source of truth for architecture, payload formats, data model, analytics definitions, and the phased roadmap. Read the relevant section of it before starting work, and keep it in sync if a decision changes. `progress.md` records what each session did and the current phase; update it before ending a session. Module path is `github.com/smhunt/sumpnet` (GitHub account `smhunt`, private repo).
 
 ## Workflow rules from the plan
 
@@ -15,21 +15,28 @@ sumpnet is a neighbourhood sump-pump and drainage monitoring platform (pilot: Ti
 - Record significant decisions as ADRs in `docs/adr/` (planned: 0001 monorepo, 0002 eventing, partitioning vs Timescale, privacy thresholds, generated-code-committed-or-not).
 - Resolve open questions in §14 with the user; don't pick an answer silently (owner auth: magic link vs Clerk, licence, gateway sites, simulator calibration).
 
-## Commands (planned, Phase 0)
+## Commands
 
-The Makefile doesn't exist yet. The plan defines these targets:
+Go is installed via Homebrew (`/opt/homebrew/bin/go`). Dev tools are pinned in `.versions.env` and installed into the gitignored `./bin` by `make tools`; the Makefile and CI both read those pins, so never call a globally installed `buf`/`golangci-lint`.
 
 ```bash
-make proto   # buf generate from proto/
-make lint    # golangci-lint (errcheck, govet, staticcheck, revive, gosec) + buf lint
-make test    # go test -race ./...
-make up      # docker compose stack: Postgres 16, Mosquitto, ChirpStack v4 + Redis, services
-make down
+make tools   # one-time: buf, golangci-lint, sqlc, migrate into ./bin at pinned versions
+make lint    # buf lint + golangci-lint run + golangci-lint fmt --diff (fails on unformatted code)
+make fmt     # apply gofmt/goimports
+make test    # go test -race -count=1 -cover ./...
+make proto   # buf generate → gen/go (gitignored until the Phase 1 ADR)
+make up      # docker compose up -d --build --wait (blocks until every healthcheck passes)
+make down / make ps / make logs S=<service>
+make env     # copies deploy/compose/.env.example → .env if missing (make up does this)
 ```
 
-Single test: `go test -race -run TestName ./internal/codec/...`. Integration tests use `testcontainers-go` (Docker must be running).
+Single test: `go test -race -run TestName ./internal/platform/...`. Integration tests (Phase 1+) are behind `-tags integration` and use `testcontainers-go`, so Docker must be running.
 
-CI (`.github/workflows/ci.yml`) runs buf lint + breaking-change check, golangci-lint, `go test -race`, and Docker builds. When you add a Makefile target, update this section.
+Breaking-change check locally: `./bin/buf breaking --against '.git#branch=main'`.
+
+CI (`.github/workflows/ci.yml`) runs buf lint/format (+breaking on PRs), golangci-lint, `go test -race`, `docker compose config`, and a per-service Docker build matrix (build only, no push). Tool versions come from `.versions.env`. When you add a Makefile target, update this section.
+
+Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/compose/docker-compose.yml` (the Makefile adds it). `docker compose down -v` wipes both the sumpnet and chirpstack databases — they share one Postgres.
 
 ## Architecture
 
@@ -74,4 +81,14 @@ mcp-server -> QueryService (never direct SQL)
 
 ## Ports
 
-No sumpnet ports are registered in `~/.claude/PORTS.md` yet. Before exposing Postgres, Mosquitto, ChirpStack, api-gateway or the web dashboard from the compose stack, follow the port protocol in the global CLAUDE.md. Remember that 8xxx is blocked, which rules out ChirpStack's default 8080 and MQTT-over-TLS 8883 (Mosquitto's plain 1883 is fine).
+Registered in `~/.claude/PORTS.md` under `### sumpnet` and set in `deploy/compose/.env` (`.env.example` has the same values):
+
+| Service | Host port | Env var |
+|---|---|---|
+| ChirpStack web UI + gRPC API | 3131 | `CHIRPSTACK_PORT` |
+| Mosquitto (sumpnet's own broker) | 3133 | `MQTT_PORT` |
+| api-gateway | 3134 | `API_PORT` |
+| Web dashboard (Phase 5) | 3034 | `WEB_PORT` |
+| Postgres 16 + pg_partman | 5444 | `POSTGRES_PORT` |
+
+Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (where the existing Photon node publishes — `mqtt-bridge` subscribes to it in Phase 2); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. HTTPS via `dev.ecoworks.ca:<port>` is deferred to Phase 5; Phase 0/1 endpoints are plain HTTP on localhost.

@@ -1,0 +1,47 @@
+# ChirpStack v4 configuration for the sumpnet local stack.
+# Adapted from chirpstack-docker; $VARS are substituted by ChirpStack from the
+# container environment (see docker-compose.yml). Every referenced variable
+# must be set, otherwise the literal "$VAR" is used.
+
+[logging]
+  level="info"
+
+[postgresql]
+  dsn="postgres://chirpstack:$CHIRPSTACK_DB_PASSWORD@$POSTGRESQL_HOST/chirpstack?sslmode=disable"
+  max_open_connections=10
+  min_idle_connections=0
+
+[redis]
+  servers=[
+    "redis://$REDIS_HOST/",
+  ]
+  tls_enabled=false
+  cluster=false
+
+[network]
+  net_id="000000"
+  # Canada uses the US915 band plan; only sub-band 0 is enabled.
+  # See region_us915_0.toml in this directory.
+  enabled_regions=[
+    "us915_0",
+  ]
+
+[api]
+  bind="0.0.0.0:8080"
+  # openssl rand -base64 32
+  secret="$CHIRPSTACK_API_SECRET"
+
+[monitoring]
+  # Exposes /health and /metrics inside the container; used by the compose
+  # healthcheck.
+  bind="0.0.0.0:8090"
+
+[integration]
+  enabled=["mqtt"]
+
+  [integration.mqtt]
+    server="tcp://$MQTT_BROKER_HOST:1883/"
+    # JSON envelope; the Go lora-bridge decodes the base64 `data` field with
+    # internal/codec (prompt_plan.md §5). No JS codecs in ChirpStack.
+    json=true
+    event_topic="application/{{application_id}}/device/{{dev_eui}}/event/{{event}}"
