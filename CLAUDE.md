@@ -35,6 +35,8 @@ make sqlc                                    # regenerate internal/store/sqlcgen
 make db-shell                                # psql into the compose Postgres
 ```
 
+Alerts gRPC: `docker run --rm --network host fullstorydev/grpcurl:v1.9.3 -plaintext -d '{"segment_id":"seg-01"}' localhost:3135 sumpnet.alerts.v1.AlertService/ListActiveAlerts` (reflection is on).
+
 The simulator is a CLI: in compose it lives behind `COMPOSE_PROFILES=sim` and exits after one replay; `make up` does not start it.
 
 Single test: `go test -race -run TestName ./internal/sim/...`. `internal/sim` takes ~40 s under `-race` (integer-heavy loop); iterate with plain `go test ./internal/sim/` (<1 s) and let `make test` do the race run.
@@ -55,6 +57,15 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - `internal/store` bulk inserts go COPY → temp staging table → `INSERT … ON CONFLICT DO NOTHING`; the Go column lists in `rows.go` must match the schema (an integration test checks). New months are created on demand for replays.
 - A bridge acknowledges an MQTT message only after ingest confirms the batch; a flush failure is fatal so the broker redelivers. Poison messages (undecodable) are acknowledged and counted in `sumpnet_bridge_drops_total{reason}`.
 - Unknown DevEUIs are auto-registered with `home_id NULL` (invisible to owner views/aggregates) unless `INGEST_AUTO_REGISTER=false`.
+
+## Consumer invariants (cycle-detector, alerts — ADR 0003)
+
+- Consumers are `internal/watermark` stages: `LISTEN sumpnet_ingest` is only a hint; the poll by `inserted_at` watermark is the truth, and poll + writes + watermark commit together. `WATERMARK_LAG` must exceed the longest ingest transaction.
+- Every alert timestamp (`raised_at`, `resolved_at`, detection `observed_at`) is **event time**, never wall clock; the only wall-clock rule is the OFFLINE sweep (`ALERTS_OFFLINE_AFTER=0` disables it — required for replays and tests).
+- The alerts service is the single writer of `alerts`. One open row per (device, code) (partial unique index); a new episode is a new row; `raised_at` is the earliest trigger across sources; a row from a lagging source cannot resolve a newer episode.
+- `cycle-detector` → `alerts` goes through the `detections` table (idempotent PK), never in-process.
+- §10 rules live in `internal/hydrology` (pure); storm-mode summaries carry the short-cycling test in aggregate (`SummaryShortCycling`).
+- Email: real provider SMTP from `.env` (`SMTP_HOST/PORT/USER/PASSWORD/FROM`, `ALERTS_TO`); empty `SMTP_HOST` = log only. `SMTP_PASSWORD` is an API key — never commit `.env`. Tests use Mailpit via testcontainers, never real mail.
 
 ## Architecture
 
@@ -108,5 +119,6 @@ Registered in `~/.claude/PORTS.md` under `### sumpnet` and set in `deploy/compos
 | api-gateway | 3134 | `API_PORT` |
 | Web dashboard (Phase 5) | 3034 | `WEB_PORT` |
 | Postgres 16 + pg_partman | 5444 | `POSTGRES_PORT` |
+| alerts gRPC (no auth until Phase 5) | 3135 | `ALERTS_GRPC_PORT` |
 
 Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (pool equipment; nothing sumpnet-related publishes there); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. HTTPS via `dev.ecoworks.ca:<port>` is deferred to Phase 5; Phase 0/1 endpoints are plain HTTP on localhost.

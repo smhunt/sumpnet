@@ -231,9 +231,16 @@ services:
         SERVICE: cycle-detector
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      DATABASE_URL: postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      POLL_INTERVAL: 30s
+      WATERMARK_LAG: 5s
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   storm-analytics:
     <<: *go-service
@@ -270,9 +277,31 @@ services:
         SERVICE: alerts
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      DATABASE_URL: postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      GRPC_ADDR: ":9091"
+      POLL_INTERVAL: 30s
+      WATERMARK_LAG: 5s
+      # Real provider SMTP from .env; an empty SMTP_HOST logs instead of sending.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS: ${SMTP_TLS:-auto}
+      ALERTS_TO: ${ALERTS_TO:-}
+      ALERTS_EMAIL_MIN_SEVERITY: warning
+      ALERTS_NOTIFY_COOLDOWN: 1h
+      ALERTS_NOTIFY_RESOLVE: critical
+      ALERTS_OFFLINE_AFTER: 1h
+    ports:
+      - "${ALERTS_GRPC_PORT}:9091"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   api-gateway:
     <<: *go-service
