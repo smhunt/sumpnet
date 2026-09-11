@@ -205,7 +205,7 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 ### Phase 0 — Scaffold
 - [x] Go module, Makefile (`make proto lint test up down`), buf config
 - [x] docker-compose: Postgres 16, Mosquitto, ChirpStack v4 (+ Redis), placeholder services
-- [ ] GitHub Actions: buf lint/breaking, golangci-lint, `go test -race`, Docker build
+- [x] GitHub Actions: buf lint/breaking, golangci-lint, `go test -race`, Docker build
 - [x] `progress.md`, `docs/adr/0001-monorepo.md`
 - **Accept:** `make up` brings stack up on the lab VM; CI green on empty services.
 

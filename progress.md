@@ -1,9 +1,9 @@
 # progress
 
 ## Status
-Phase: **0 — Scaffold** (local acceptance passed 2026-09-11; awaiting first green CI run)
+Phase: **0 — Scaffold** — DONE 2026-09-11 (all acceptance criteria met, CI run 34634272184 green)
 
-Next phase: 1 — Contracts + simulator (do not start until Phase 0 acceptance below passes).
+Current phase: **1 — Contracts + simulator** (in progress)
 
 ## Session log (newest first)
 
@@ -34,4 +34,4 @@ Next phase: 1 — Contracts + simulator (do not start until Phase 0 acceptance b
 - [x] `curl -s localhost:3134/readyz` → 200; `/metrics` contains `sumpnet_build_info`
 - [x] ChirpStack UI on http://localhost:3131 (admin/admin); `pg_partman` in sumpnet DB; `pg_trgm`/`hstore` in chirpstack DB
 - [x] `make down && make up` idempotent
-- [ ] First push to `smhunt/sumpnet` green on all CI jobs
+- [x] First push to `smhunt/sumpnet` green on all CI jobs (15/15, https://github.com/smhunt/sumpnet/actions/runs/34634272184)
