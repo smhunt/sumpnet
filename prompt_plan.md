@@ -146,7 +146,8 @@ sumpnet/
 // telemetry/v1
 service IngestService {
   rpc SubmitReadings(stream SubmitReadingsRequest) returns (SubmitReadingsResponse);
-  rpc SubmitCycleEvents(stream SubmitCycleEventsRequest) returns (SubmitCycleEventsResponse);
+  rpc SubmitCycleEvents(stream SubmitCycleEventsRequest) returns (SubmitCycleEventsResponse); // also carries fPort 4 storm summaries
+  rpc SubmitAlarms(stream SubmitAlarmsRequest) returns (SubmitAlarmsResponse);                // fPort 3
 }
 
 // query/v1
@@ -154,7 +155,7 @@ service QueryService {
   rpc GetHome(GetHomeRequest) returns (GetHomeResponse);                // owner-scoped
   rpc ListStormEvents(ListStormEventsRequest) returns (ListStormEventsResponse);
   rpc GetStormEvent(GetStormEventRequest) returns (GetStormEventResponse); // segment aggregates
-  rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream NeighbourhoodUpdate);
+  rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream WatchNeighbourhoodResponse); // wraps NeighbourhoodUpdate (buf RPC_RESPONSE_STANDARD_NAME)
 }
 
 // alerts/v1
@@ -164,7 +165,7 @@ service AlertService {
 }
 ```
 
-Internal service-to-service events: start with Postgres `LISTEN/NOTIFY` for simplicity; document the trade-off vs NATS/SQS in `docs/adr/0002-eventing.md`.
+Internal service-to-service events: start with Postgres `LISTEN/NOTIFY` for simplicity; document the trade-off vs NATS/SQS in `docs/adr/0003-eventing.md` (0002 is the generated-code decision, made first in Phase 1).
 
 ## 9. Data model (initial)
 
@@ -276,3 +277,4 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - [ ] Owner auth: magic link vs Clerk?
 - [ ] Should the simulator's hydrology model be calibrated against the first real storm before any public numbers are shared?
 - [ ] Licence: MIT vs AGPL for the platform; firmware separate?
+- [ ] Rain-gauge node uplink format: §5 defines no fPort for tipping-bucket gauges. Define (fPort 5?) before Phase 4.

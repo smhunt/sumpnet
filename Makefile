@@ -37,10 +37,12 @@ proto: $(BUF)
 ## lint: buf lint + golangci-lint (linters and formatters)
 lint: $(BUF) $(GOLANGCI)
 	$(BUF) lint
+	$(BUF) format --diff --exit-code
 	$(GOLANGCI) run ./...
 	$(GOLANGCI) fmt --diff ./...
 
-fmt: $(GOLANGCI)
+fmt: $(BUF) $(GOLANGCI)
+	$(BUF) format -w
 	$(GOLANGCI) fmt ./...
 
 test:

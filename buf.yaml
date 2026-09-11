@@ -1,6 +1,9 @@
 version: v2
 modules:
   - path: proto
+deps:
+  # google/api/annotations.proto + http.proto for grpc-gateway bindings
+  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD
