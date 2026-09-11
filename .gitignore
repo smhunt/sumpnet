@@ -1,0 +1,28 @@
+# Go
+bin/
+*.test
+*.out
+coverage.*
+
+# Node
+node_modules/
+web/dist/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Claude local settings
+.claude/settings.local.json
