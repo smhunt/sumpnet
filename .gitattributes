@@ -1,2 +1,5 @@
 # Generated protobuf/gRPC/gateway code: collapsed in PR review (ADR 0002).
 gen/go/** linguist-generated=true
+
+# sqlc output: collapsed in PR review; CI fails if stale.
+internal/store/sqlcgen/** linguist-generated=true

@@ -4,59 +4,24 @@ package sim
 
 import (
 	"context"
-	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/paho"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/smhunt/sumpnet/internal/chirpstack"
+	"github.com/smhunt/sumpnet/internal/testinfra"
 )
-
-const mosquittoConf = "listener 1883\nallow_anonymous true\n"
-
-func startMosquitto(t *testing.T, ctx context.Context) string {
-	t.Helper()
-	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "eclipse-mosquitto:2",
-			ExposedPorts: []string{"1883/tcp"},
-			Files: []testcontainers.ContainerFile{{
-				Reader:            strings.NewReader(mosquittoConf),
-				ContainerFilePath: "/mosquitto/config/mosquitto.conf",
-				FileMode:          0o644,
-			}},
-			WaitingFor: wait.ForListeningPort("1883/tcp").WithStartupTimeout(30 * time.Second),
-		},
-		Started: true,
-	})
-	if err != nil {
-		t.Fatalf("start mosquitto: %v", err)
-	}
-	t.Cleanup(func() { _ = c.Terminate(context.Background()) })
-	host, err := c.Host(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, err := c.MappedPort(ctx, "1883/tcp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return fmt.Sprintf("mqtt://%s:%s", host, port.Port())
-}
 
 type received struct {
 	topic   string
 	payload []byte
 }
 
-func subscribe(t *testing.T, ctx context.Context, broker string) (<-chan received, func()) {
+func subscribe(ctx context.Context, t *testing.T, broker string) (<-chan received, func()) {
 	t.Helper()
 	u, _ := url.Parse(broker)
 	ch := make(chan received, 10000)
@@ -94,8 +59,8 @@ func subscribe(t *testing.T, ctx context.Context, broker string) (<-chan receive
 func TestMQTTSinkIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	broker := startMosquitto(t, ctx)
-	rx, stop := subscribe(t, ctx, broker)
+	broker := testinfra.StartMosquitto(t)
+	rx, stop := subscribe(ctx, t, broker)
 	defer stop()
 
 	scn := Scenarios()["storm25"]

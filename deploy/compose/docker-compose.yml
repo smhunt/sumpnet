@@ -5,11 +5,14 @@
 # databases, so `docker compose down -v` wipes both.
 name: sumpnet
 
+# Environment maps DO merge with <<:, so services extend *go-env with their own vars.
+x-go-env: &go-env
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  HTTP_ADDR: ":8080"
+
 x-go-service: &go-service
   restart: unless-stopped
-  environment:
-    LOG_LEVEL: ${LOG_LEVEL:-info}
-    HTTP_ADDR: ":8080"
+  environment: *go-env
   healthcheck:
     # distroless has no curl; the binary probes its own /readyz.
     test: ["CMD", "/svc", "healthcheck"]
@@ -34,6 +37,8 @@ services:
       - pg_partman_bgw.dbname=sumpnet
       - -c
       - pg_partman_bgw.role=sumpnet
+      - -c
+      - timezone=UTC # partman month boundaries are computed in the session timezone
     volumes:
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
@@ -44,6 +49,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # One-shot schema migration (golang-migrate). ingest waits for it and also
+  # verifies the schema version itself at startup.
+  migrate:
+    image: migrate/migrate:v4.19.1
+    command:
+      - -path=/migrations
+      - -database=postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      - up
+    volumes:
+      - ../../migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   redis:
     image: redis:7-alpine
@@ -118,8 +138,10 @@ services:
   # --- Go services (placeholders until their phase) -------------------------
   # YAML anchors cannot deep-merge build.args, so each service restates build:.
 
+  # The simulator is a CLI, not a service: opt in with COMPOSE_PROFILES=sim
+  # (or use `make sim`, which runs it from the host). One replay, then exit.
   simulator:
-    <<: *go-service
+    profiles: ["sim"]
     build:
       context: ../..
       dockerfile: Dockerfile
@@ -127,6 +149,15 @@ services:
         SERVICE: simulator
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    restart: "no"
+    command:
+      - -scenario=${SIM_SCENARIO:-storm50}
+      - -seed=${SIM_SEED:-42}
+      - -speed=${SIM_SPEED:-60}
+      - -homes=${SIM_HOMES:-60}
+      - -sink=mqtt
+      - -mqtt-url=mqtt://mosquitto:1883
+      - -hash
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -140,8 +171,15 @@ services:
         SERVICE: lora-bridge
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_CLIENT_ID: lora-bridge
+      INGEST_ADDR: ingest:9090
     depends_on:
       mosquitto:
+        condition: service_healthy
+      ingest:
         condition: service_healthy
 
   mqtt-bridge:
@@ -153,8 +191,16 @@ services:
         SERVICE: mqtt-bridge
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      MQTT_URL: mqtt://mosquitto:1883
+      MQTT_CLIENT_ID: mqtt-bridge
+      MQTT_TOPIC: sumpnet/v1/+/up
+      INGEST_ADDR: ingest:9090
     depends_on:
       mosquitto:
+        condition: service_healthy
+      ingest:
         condition: service_healthy
 
   ingest:
@@ -166,9 +212,15 @@ services:
         SERVICE: ingest
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      DATABASE_URL: postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      GRPC_ADDR: ":9090"
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   cycle-detector:
     <<: *go-service

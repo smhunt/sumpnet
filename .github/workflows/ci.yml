@@ -20,6 +20,7 @@ jobs:
     outputs:
       buf: ${{ steps.v.outputs.buf }}
       golangci: ${{ steps.v.outputs.golangci }}
+      sqlc: ${{ steps.v.outputs.sqlc }}
     steps:
       - uses: actions/checkout@v7
       - id: v
@@ -27,6 +28,7 @@ jobs:
           set -a; . ./.versions.env; set +a
           echo "buf=${BUF_VERSION#v}" >> "$GITHUB_OUTPUT"
           echo "golangci=${GOLANGCI_LINT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sqlc=${SQLC_VERSION}" >> "$GITHUB_OUTPUT"
 
   buf:
     needs: versions
@@ -60,6 +62,8 @@ jobs:
           version: ${{ needs.versions.outputs.golangci }}
       - name: Formatters
         run: golangci-lint fmt --diff ./...
+      - name: sqlc output is up to date
+        run: go run github.com/sqlc-dev/sqlc/cmd/sqlc@${{ needs.versions.outputs.sqlc }} diff
 
   test:
     runs-on: ubuntu-latest

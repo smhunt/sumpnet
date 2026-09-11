@@ -32,7 +32,7 @@ Questions the platform must answer:
 House nodes (LoRa 915 MHz) ─┐
 Rain / groundwater nodes  ──┼─> LoRaWAN gateways ×2 ─> ChirpStack v4 ─┐
                             │                                         │ MQTT integration events
-Existing Photon (WiFi) ─────┴────────────────────────> Mosquitto ─────┤
+ESP32 Wi-Fi nodes (dev) ────┴────────────────────────> Mosquitto ─────┤
                                                                       v
                                    ┌──────────── Go services (gRPC) ────────────┐
                                    │ lora-bridge  mqtt-bridge  ->  ingest       │
@@ -52,7 +52,7 @@ Canada uses the US915 LoRaWAN band plan (902–928 MHz). No duty-cycle limit, bu
 
 | Item | Qty | Notes |
 |---|---|---|
-| LoRa node MCU: RAK WisBlock RAK4631 + RAK19007 base | 1 per house | nRF52840 + SX1262, low power. Alt: Adafruit Feather RP2040 RFM95 (BC Robotics) |
+| LoRa node MCU: ESP32-S3 + SX1262 board (Heltec WiFi LoRa 32 V3 or LILYGO T3-S3) | 1 per house | LoRaWAN via RadioLib; Wi-Fi → MQTT is the bench/dev path (§5). Alt: RAK WisBlock RAK4631 (nRF52840) |
 | JSN-SR04T waterproof ultrasonic | 1 per house | Pit level (already proven on Photon node) |
 | SCT-013 CT clamp + plug-through line splitter | 1–2 per house | Primary + backup pump current |
 | Float switch | 1 per house | Independent high-water alarm |
@@ -93,6 +93,8 @@ Decoder lives in Go (`internal/codec`), not in ChirpStack JS codecs. Table-drive
 Codes: 1 float_high, 2 mains_lost, 3 dry_run, 4 continuous_run, 5 sensor_fault.
 
 **Storm mode:** if more than 6 cycles occur within 15 min, stop sending individual fPort 2 events and roll cycles into a summary (fPort 4: count, total_run_s, max_peak_current_da, min_level_mm) to protect airtime.
+
+**Wi-Fi transport (bench/dev nodes):** the same payload bytes, published over MQTT to `sumpnet/v1/{dev_eui}/up` (QoS 1) as `{"fcnt":N,"fport":P,"data":"<base64>","t":<unix s, optional>,"rssi":<dBm, optional>}`. `mqtt-bridge` decodes it with the same `internal/codec`. Spec: `docs/node-mqtt.md`.
 
 ## 6. Repo layout
 
@@ -218,10 +220,10 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** simulator replays a 50 mm storm for 60 homes at 60× speed, deterministic with a seed.
 
 ### Phase 2 — Ingest path
-- [ ] `lora-bridge` (ChirpStack MQTT integration → decode → gRPC stream to ingest)
-- [ ] `mqtt-bridge` for the existing Photon node's topics
-- [ ] `ingest` service + migrations + sqlc queries, idempotent on (device_id, ts, fcnt)
-- [ ] Backpressure: bounded channels, batch inserts via `pgx.CopyFrom`
+- [x] `lora-bridge` (ChirpStack MQTT integration → decode → gRPC stream to ingest)
+- [x] `mqtt-bridge` for ESP32 Wi-Fi nodes publishing the codec bytes in the `sumpnet/v1/{dev_eui}/up` envelope (§5)
+- [x] `ingest` service + migrations + sqlc queries, idempotent on (device_id, ts, fcnt)
+- [x] Backpressure: bounded channels, batch inserts via `pgx.CopyFrom`
 - **Accept:** integration test (testcontainers) ingests a full simulated storm with zero loss and no duplicates.
 
 ### Phase 3 — Cycle detection + alerts
@@ -246,9 +248,9 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** Claude can answer "Which segments pumped the most in the last storm, and how fast did they recover?"
 
 ### Phase 7 — Firmware + first real nodes
-- [ ] RAK4631 firmware (PlatformIO): sensor read, local cycle detection, payload encode matching `internal/codec`, storm mode, OTAA join
+- [ ] ESP32-S3 firmware (PlatformIO; RadioLib LoRaWAN OTAA, Wi-Fi/MQTT envelope as fallback): sensor read, local cycle detection, payload encode matching `internal/codec`, storm mode
 - [ ] Single-house RF survey: RSSI/SNR at SF7–SF10 from the sump location; document in `docs/rf-survey.md`
-- [ ] Bring the existing Photon node and one LoRa node live alongside simulated homes
+- [ ] Bring one LoRa node and one Wi-Fi node live alongside simulated homes
 - **Accept:** real node data passes through the identical pipeline as the simulator; RF margin documented.
 
 ### Phase 8 — AWS + load test

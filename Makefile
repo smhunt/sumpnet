@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean
+.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell
 
 all: lint test
 
@@ -39,6 +39,7 @@ lint: $(BUF) $(GOLANGCI)
 	$(BUF) lint
 	$(BUF) format --diff --exit-code
 	$(GOLANGCI) run ./...
+	$(GOLANGCI) run --build-tags integration ./...
 	$(GOLANGCI) fmt --diff ./...
 
 fmt: $(BUF) $(GOLANGCI)
@@ -80,6 +81,26 @@ logs:
 
 ps:
 	$(COMPOSE) ps
+
+## Database (values from deploy/compose/.env)
+DB_URL ?= postgres://sumpnet:$$(grep '^POSTGRES_PASSWORD=' deploy/compose/.env | cut -d= -f2)@localhost:$$(grep '^POSTGRES_PORT=' deploy/compose/.env | cut -d= -f2)/sumpnet?sslmode=disable
+
+migrate-up: $(MIGRATE) env
+	$(MIGRATE) -path migrations -database "$(DB_URL)" up
+
+migrate-down: $(MIGRATE) env
+	$(MIGRATE) -path migrations -database "$(DB_URL)" down 1
+
+## migrate-new: create migrations/NNNN_$(NAME).{up,down}.sql
+migrate-new: $(MIGRATE)
+	$(MIGRATE) create -ext sql -dir migrations -seq $(NAME)
+
+## sqlc: regenerate internal/store/sqlcgen
+sqlc: $(SQLC)
+	$(SQLC) generate
+
+db-shell: env
+	$(COMPOSE) exec postgres psql -U sumpnet -d sumpnet
 
 ## env: create deploy/compose/.env from the example if missing
 env:

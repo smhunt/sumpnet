@@ -14,7 +14,7 @@ Pilot neighbourhood: Timberwalk, Ilderton (Middlesex Centre, ON). Working plan a
 House nodes (LoRa 915 MHz) ─┐
 Rain / groundwater nodes  ──┼─> LoRaWAN gateways ×2 ─> ChirpStack v4 ─┐
                             │                                         │ MQTT integration events
-Existing Photon (WiFi) ─────┴────────────────────────> Mosquitto ─────┤
+ESP32 Wi-Fi nodes (dev) ────┴────────────────────────> Mosquitto ─────┤
                                                                       v
                                    ┌──────────── Go services (gRPC) ────────────┐
                                    │ lora-bridge  mqtt-bridge  ->  ingest       │
@@ -54,7 +54,17 @@ Ports are read from `deploy/compose/.env` (created from `.env.example`). ChirpSt
 the `CHIRPSTACK_PORT` (default 3131, admin/admin).
 
 Development loop: `make lint`, `make test`, `make test-integration` (Docker), `make proto` after
-editing anything under `proto/`.
+editing anything under `proto/`, `make sqlc` after editing `internal/store/queries/` or `migrations/`.
+Database: `make migrate-up`, `make migrate-new NAME=add_thing`, `make db-shell`.
+
+## The ingest path
+
+`lora-bridge` subscribes to ChirpStack's uplink events (`lora-bridge`) and ESP32 nodes on the
+Wi-Fi transport (`mqtt-bridge`, [`docs/node-mqtt.md`](docs/node-mqtt.md)); both decode the same
+`internal/codec` bytes and stream batches to `ingest` over gRPC. `ingest` stores them with
+`COPY` into Postgres, idempotent on `(device_id, event time, f_cnt)`, into monthly partitions
+managed by pg_partman, and signals downstream services with `LISTEN/NOTIFY`. MQTT messages are
+acknowledged only after the database commit, so a crash means redelivery, never loss.
 
 ## The simulator
 
@@ -74,8 +84,8 @@ against known answers.
 | Phase | State |
 |---|---|
 | 0 — Scaffold (module, compose stack, CI) | done |
-| 1 — Contracts + simulator | in progress |
-| 2 — Ingest path | planned |
+| 1 — Contracts + simulator | done |
+| 2 — Ingest path | done |
 | 3 — Cycle detection + alerts | planned |
 | 4 — Weather + storm analytics | planned |
 | 5 — API gateway + dashboard | planned |
