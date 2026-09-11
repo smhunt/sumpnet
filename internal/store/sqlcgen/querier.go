@@ -6,22 +6,65 @@ package sqlcgen
 
 import (
 	"context"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
+	AcknowledgeAlert(ctx context.Context, arg AcknowledgeAlertParams) (Alert, error)
 	CountAlarmEvents(ctx context.Context) (int64, error)
 	CountCycleEvents(ctx context.Context) (int64, error)
+	CountOpenAlertsByCode(ctx context.Context) ([]CountOpenAlertsByCodeRow, error)
 	CountReadings(ctx context.Context) (int64, error)
 	CountStormSummaries(ctx context.Context) (int64, error)
 	// Rows and highest frame counter per device across every telemetry table;
 	// with contiguous counters rows == max_f_cnt + 1.
 	FCntStatsByDevice(ctx context.Context) ([]FCntStatsByDeviceRow, error)
+	GetAlert(ctx context.Context, id uuid.UUID) (GetAlertRow, error)
 	GetCycleEvent(ctx context.Context, arg GetCycleEventParams) (CycleEvent, error)
 	GetDevice(ctx context.Context, devEui string) (Device, error)
+	GetDevicePitArea(ctx context.Context, devEui string) (GetDevicePitAreaRow, error)
+	// The alerts service is the single writer of this table.
+	GetOpenAlert(ctx context.Context, arg GetOpenAlertParams) (Alert, error)
+	GetWatermark(ctx context.Context, arg GetWatermarkParams) (time.Time, error)
+	InsertAlert(ctx context.Context, arg InsertAlertParams) (Alert, error)
+	InsertDetection(ctx context.Context, arg InsertDetectionParams) (int64, error)
+	// The newest inserted_at a poller may read: now() minus the lag that covers
+	// in-flight ingest transactions. Computed in SQL so only the DB clock matters.
+	LagBoundary(ctx context.Context, lagSeconds float64) (time.Time, error)
+	LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (time.Time, error)
+	LinkDevice(ctx context.Context, arg LinkDeviceParams) error
+	ListActiveAlerts(ctx context.Context, arg ListActiveAlertsParams) ([]ListActiveAlertsRow, error)
+	ListAlertsForDevice(ctx context.Context, deviceID string) ([]Alert, error)
+	ListCyclesBefore(ctx context.Context, arg ListCyclesBeforeParams) ([]CycleEvent, error)
+	ListDetections(ctx context.Context, deviceID string) ([]Detection, error)
 	ListDevices(ctx context.Context) ([]Device, error)
+	ListPendingRaiseNotifications(ctx context.Context, arg ListPendingRaiseNotificationsParams) ([]ListPendingRaiseNotificationsRow, error)
+	ListPendingResolveNotifications(ctx context.Context, arg ListPendingResolveNotificationsParams) ([]ListPendingResolveNotificationsRow, error)
+	ListReadingsBefore(ctx context.Context, arg ListReadingsBeforeParams) ([]Reading, error)
 	ListReadingsForDevice(ctx context.Context, arg ListReadingsForDeviceParams) ([]Reading, error)
+	// Devices silent longer than the given number of seconds (wall clock).
+	ListStaleDevices(ctx context.Context, afterSeconds float64) ([]ListStaleDevicesRow, error)
+	MarkRaiseNotification(ctx context.Context, arg MarkRaiseNotificationParams) error
+	MarkResolveNotification(ctx context.Context, arg MarkResolveNotificationParams) error
+	PollAlarmEvents(ctx context.Context, arg PollAlarmEventsParams) ([]AlarmEvent, error)
+	// Poll queries: rows newer than the watermark, never splitting an inserted_at
+	// group (all rows of one ingest batch share it), bounded to max_groups groups
+	// and to the lag boundary.
+	PollCycleEvents(ctx context.Context, arg PollCycleEventsParams) ([]CycleEvent, error)
+	PollDetections(ctx context.Context, arg PollDetectionsParams) ([]Detection, error)
+	PollReadings(ctx context.Context, arg PollReadingsParams) ([]Reading, error)
+	// Backfill after an operator links a device to a home with a pit area.
+	RecomputeCycleVolumes(ctx context.Context, devEui string) (int64, error)
+	ResolveOpenAlert(ctx context.Context, arg ResolveOpenAlertParams) (Alert, error)
+	SetCycleVolume(ctx context.Context, arg []SetCycleVolumeParams) *SetCycleVolumeBatchResults
+	SetWatermark(ctx context.Context, arg SetWatermarkParams) error
 	SumStormSummaryCycles(ctx context.Context) (int64, error)
+	TouchAlert(ctx context.Context, arg TouchAlertParams) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
+	UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, error)
+	UpsertSegment(ctx context.Context, arg UpsertSegmentParams) error
 }
 
 var _ Querier = (*Queries)(nil)

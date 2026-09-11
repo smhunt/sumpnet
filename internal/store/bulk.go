@@ -30,6 +30,20 @@ type Notification struct {
 	MaxTS time.Time `json:"max_ts"`
 }
 
+// Notify sends a wake-up hint on NotifyChannel inside tx (delivered at commit).
+// Any ADR 0003 producer — ingest for telemetry tables, cycle-detector for
+// detections — calls this once per committed batch.
+func Notify(ctx context.Context, tx pgx.Tx, n Notification) error {
+	payload, err := json.Marshal(n)
+	if err != nil {
+		return fmt.Errorf("store: notify payload: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotifyChannel, string(payload)); err != nil {
+		return fmt.Errorf("store: notify: %w", err)
+	}
+	return nil
+}
+
 // table describes one telemetry table for the bulk path.
 type table struct {
 	name        string
@@ -172,9 +186,8 @@ func (s *Store) insert(ctx context.Context, t table, vals [][]any, times []time.
 	res.Duplicates = int(copied) - res.Accepted - res.Rejected
 
 	if res.Accepted > 0 {
-		payload, _ := json.Marshal(Notification{Table: t.name, N: res.Accepted, MinTS: minTS.UTC(), MaxTS: maxTS.UTC()})
-		if _, err := tx.Exec(ctx, `SELECT pg_notify($1, $2)`, NotifyChannel, string(payload)); err != nil {
-			return Result{}, fmt.Errorf("store: notify: %w", err)
+		if err := Notify(ctx, tx, Notification{Table: t.name, N: res.Accepted, MinTS: minTS.UTC(), MaxTS: maxTS.UTC()}); err != nil {
+			return Result{}, err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

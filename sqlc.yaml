@@ -23,3 +23,10 @@ sql:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.NullUUID"
             nullable: true
+          - db_type: "pg_catalog.numeric"
+            go_type: "float64"
+          - db_type: "pg_catalog.numeric"
+            go_type:
+              import: "database/sql"
+              type: "NullFloat64"
+            nullable: true
