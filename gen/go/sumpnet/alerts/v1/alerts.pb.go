@@ -148,16 +148,19 @@ func (AlertSeverity) EnumDescriptor() ([]byte, []int) {
 }
 
 type Alert struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	HomeId        string                 `protobuf:"bytes,2,opt,name=home_id,json=homeId,proto3" json:"home_id,omitempty"`
-	SegmentId     string                 `protobuf:"bytes,3,opt,name=segment_id,json=segmentId,proto3" json:"segment_id,omitempty"`
-	Code          AlertCode              `protobuf:"varint,4,opt,name=code,proto3,enum=sumpnet.alerts.v1.AlertCode" json:"code,omitempty"`
-	Severity      AlertSeverity          `protobuf:"varint,5,opt,name=severity,proto3,enum=sumpnet.alerts.v1.AlertSeverity" json:"severity,omitempty"`
-	RaisedAt      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=raised_at,json=raisedAt,proto3" json:"raised_at,omitempty"`
-	AckedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`
-	ResolvedAt    *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
-	Message       string                 `protobuf:"bytes,9,opt,name=message,proto3" json:"message,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	HomeId     string                 `protobuf:"bytes,2,opt,name=home_id,json=homeId,proto3" json:"home_id,omitempty"`
+	SegmentId  string                 `protobuf:"bytes,3,opt,name=segment_id,json=segmentId,proto3" json:"segment_id,omitempty"`
+	Code       AlertCode              `protobuf:"varint,4,opt,name=code,proto3,enum=sumpnet.alerts.v1.AlertCode" json:"code,omitempty"`
+	Severity   AlertSeverity          `protobuf:"varint,5,opt,name=severity,proto3,enum=sumpnet.alerts.v1.AlertSeverity" json:"severity,omitempty"`
+	RaisedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=raised_at,json=raisedAt,proto3" json:"raised_at,omitempty"`
+	AckedAt    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=acked_at,json=ackedAt,proto3" json:"acked_at,omitempty"`
+	ResolvedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
+	Message    string                 `protobuf:"bytes,9,opt,name=message,proto3" json:"message,omitempty"`
+	// Pseudonymous DevEUI, so alerts on devices not yet linked to a home are
+	// still actionable by an operator.
+	DeviceId      string `protobuf:"bytes,10,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -251,6 +254,13 @@ func (x *Alert) GetResolvedAt() *timestamppb.Timestamp {
 func (x *Alert) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *Alert) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
 	}
 	return ""
 }
@@ -453,7 +463,7 @@ var File_sumpnet_alerts_v1_alerts_proto protoreflect.FileDescriptor
 
 const file_sumpnet_alerts_v1_alerts_proto_rawDesc = "" +
 	"\n" +
-	"\x1esumpnet/alerts/v1/alerts.proto\x12\x11sumpnet.alerts.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x86\x03\n" +
+	"\x1esumpnet/alerts/v1/alerts.proto\x12\x11sumpnet.alerts.v1\x1a\x1cgoogle/api/annotations.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x03\n" +
 	"\x05Alert\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\ahome_id\x18\x02 \x01(\tR\x06homeId\x12\x1d\n" +
@@ -465,7 +475,9 @@ const file_sumpnet_alerts_v1_alerts_proto_rawDesc = "" +
 	"\backed_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aackedAt\x12;\n" +
 	"\vresolved_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"resolvedAt\x12\x18\n" +
-	"\amessage\x18\t \x01(\tR\amessage\"Q\n" +
+	"\amessage\x18\t \x01(\tR\amessage\x12\x1b\n" +
+	"\tdevice_id\x18\n" +
+	" \x01(\tR\bdeviceId\"Q\n" +
 	"\x17ListActiveAlertsRequest\x12\x17\n" +
 	"\ahome_id\x18\x01 \x01(\tR\x06homeId\x12\x1d\n" +
 	"\n" +
