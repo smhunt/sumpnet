@@ -25,11 +25,6 @@ linters:
         - name: context-as-argument
         - name: error-strings
         - name: unused-parameter
-    gosec:
-      excludes:
-        # Integer overflow conversions; re-enable in Phase 1 once the codec
-        # exists and can be proven clean.
-        - G115
   exclusions:
     generated: lax
     paths:
