@@ -211,10 +211,10 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** `make up` brings stack up on the lab VM; CI green on empty services.
 
 ### Phase 1 — Contracts + simulator
-- [ ] Protos in §8; generated code committed or generated in CI (decide + ADR)
-- [ ] `internal/codec` with golden-vector tests for all fPorts
-- [ ] `cmd/simulator`: 60 homes across ~8 segments; per-home parameters (pit area, baseflow, lag, recession, pump health); rainfall scenarios (dry week, 25 mm summer storm, 50 mm spring thaw + rain, power outage mid-storm, failing pump)
-- [ ] Simulator publishes ChirpStack-shaped MQTT uplink events so the real bridge path is exercised
+- [x] Protos in §8; generated code committed or generated in CI (decide + ADR)
+- [x] `internal/codec` with golden-vector tests for all fPorts
+- [x] `cmd/simulator`: 60 homes across ~8 segments; per-home parameters (pit area, baseflow, lag, recession, pump health); rainfall scenarios (dry week, 25 mm summer storm, 50 mm spring thaw + rain, power outage mid-storm, failing pump)
+- [x] Simulator publishes ChirpStack-shaped MQTT uplink events so the real bridge path is exercised
 - **Accept:** simulator replays a 50 mm storm for 60 homes at 60× speed, deterministic with a seed.
 
 ### Phase 2 — Ingest path

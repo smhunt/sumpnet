@@ -31,3 +31,6 @@ web/dist/
 
 # Compose bind-mounted data
 deploy/compose/data/
+
+# Simulator ground-truth exports (the stream hash is recorded in progress.md)
+loadtest/results/*.json

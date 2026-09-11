@@ -28,9 +28,15 @@ make proto   # buf generate → gen/go (committed; CI fails if stale — see ADR
 make up      # docker compose up -d --build --wait (blocks until every healthcheck passes)
 make down / make ps / make logs S=<service>
 make env     # copies deploy/compose/.env.example → .env if missing (make up does this)
+make test-integration                       # -tags integration; testcontainers, needs Docker
+make sim SCENARIO=storm50 SEED=42 SPEED=60  # replay into the stack's Mosquitto; truth → loadtest/results/
 ```
 
-Single test: `go test -race -run TestName ./internal/platform/...`. Integration tests (Phase 1+) are behind `-tags integration` and use `testcontainers-go`, so Docker must be running.
+Single test: `go test -race -run TestName ./internal/sim/...`. `internal/sim` takes ~40 s under `-race` (integer-heavy loop); iterate with plain `go test ./internal/sim/` (<1 s) and let `make test` do the race run.
+
+Simulator CLI: `go run ./cmd/simulator -list-scenarios`; `-sink stdout -hash` writes JSONL to stdout and the SHA-256 of the event stream to stderr (logs also go to stderr, so stdout stays pure JSONL). Same seed ⇒ byte-identical output; never introduce `time.Now()`, `uuid.New()` or map iteration into `internal/sim`'s emission path.
+
+**Integration tests from Claude's Bash tool:** testcontainers calls the Docker credential helper (`osxkeychain`), which hangs in the sandboxed shell waiting on Keychain. Run them as `DOCKER_CONFIG=<dir containing an empty config.json> go test -tags integration ./...` (public images need no auth). From a normal terminal `make test-integration` works as-is.
 
 Breaking-change check locally: `./bin/buf breaking --against '.git#branch=main'`.
 
