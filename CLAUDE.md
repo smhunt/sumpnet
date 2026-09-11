@@ -24,7 +24,7 @@ make tools   # one-time: buf, golangci-lint, sqlc, migrate into ./bin at pinned 
 make lint    # buf lint + golangci-lint run + golangci-lint fmt --diff (fails on unformatted code)
 make fmt     # apply gofmt/goimports
 make test    # go test -race -count=1 -cover ./...
-make proto   # buf generate → gen/go (gitignored until the Phase 1 ADR)
+make proto   # buf generate → gen/go (committed; CI fails if stale — see ADR 0002)
 make up      # docker compose up -d --build --wait (blocks until every healthcheck passes)
 make down / make ps / make logs S=<service>
 make env     # copies deploy/compose/.env.example → .env if missing (make up does this)

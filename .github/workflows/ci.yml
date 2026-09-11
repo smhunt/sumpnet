@@ -42,8 +42,10 @@ jobs:
           breaking: ${{ github.event_name == 'pull_request' }}
           push: false
           archive: false
-      - name: Generate (proves the pinned remote plugins resolve)
-        run: buf generate
+      - name: Generated code is up to date
+        run: |
+          buf generate
+          git diff --exit-code -- gen/ || { echo '::error::gen/ is stale — run make proto and commit'; exit 1; }
 
   lint:
     needs: versions
