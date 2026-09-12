@@ -168,7 +168,12 @@ service QueryService {
   rpc GetHome(GetHomeRequest) returns (GetHomeResponse);                // owner-scoped
   rpc ListStormEvents(ListStormEventsRequest) returns (ListStormEventsResponse);
   rpc GetStormEvent(GetStormEventRequest) returns (GetStormEventResponse); // segment aggregates
-  rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream WatchNeighbourhoodResponse); // wraps NeighbourhoodUpdate (buf RPC_RESPONSE_STANDARD_NAME)
+  rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream WatchNeighbourhoodResponse); // wraps NeighbourhoodUpdate (buf RPC_RESPONSE_STANDARD_NAME); alerts only to their owner
+  // Phase 5 additions (additive): public segment catalogue; owner-scoped homes/alerts; ack proxied to AlertService
+  rpc ListSegments(ListSegmentsRequest) returns (ListSegmentsResponse);
+  rpc ListMyHomes(ListMyHomesRequest) returns (ListMyHomesResponse);
+  rpc ListMyAlerts(ListMyAlertsRequest) returns (ListMyAlertsResponse);
+  rpc AcknowledgeMyAlert(AcknowledgeMyAlertRequest) returns (AcknowledgeMyAlertResponse);
 }
 
 // alerts/v1
@@ -253,9 +258,10 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** simulated storm produces lag/recession within ±10% of the simulator's ground-truth parameters.
 
 ### Phase 5 — API gateway + dashboard
-- [ ] `api-gateway`: gRPC + REST (grpc-gateway), `WatchNeighbourhood` server streaming, auth (owner magic-link or Clerk)
-- [ ] `web/`: MapLibre segment heatmap, storm replay slider, owner home view, alert list
+- [x] `api-gateway`: gRPC + REST (grpc-gateway), `WatchNeighbourhood` server streaming, auth (Clerk JWTs, ADR 0006)
+- [ ] `web/`: MapLibre segment heatmap, storm replay slider, owner home view, alert list — built (lint, Vitest, production build, HTTPS dev-server smoke); tick after the live map check
 - **Accept:** live storm replay visible on the map; owner sees own home only; public view shows aggregates only.
+  - Status 2026-09-12: "owner sees own home only" and "public view shows aggregates only" pass in `internal/e2e` over gRPC and REST. "Live storm replay visible on the map" needs Phase 4's `storm_events`/`home_storm_metrics` and a browser check against the running stack after merge; the live segment heatmap already animates during a simulator replay (neighbourhood clock).
 
 ### Phase 6 — MCP server
 - [ ] Tools: `list_storm_events`, `get_storm_summary`, `get_segment_load`, `get_my_home_health`, `list_active_alerts`

@@ -34,7 +34,13 @@ make migrate-up / migrate-down / migrate-new NAME=x   # golang-migrate against t
 make sqlc                                    # regenerate internal/store/sqlcgen (committed; CI runs sqlc diff)
 make db-shell                                # psql into the compose Postgres
 make alerts-testmail                         # one test email through the SMTP provider in .env (Resend)
+make seed [DEMO_OWNER_SUBJECT=user_...]      # illustrative Timberwalk segments + the simulator's homes/devices (SEED, HOMES); optional Clerk owner link
+make web-install / web-dev / web-test / web-build   # dashboard in web/: npm ci, Vite https://dev.ecoworks.ca:3034, eslint+tsc+vitest, production build
 ```
+
+Dashboard: `cp web/.env.example web/.env.local` (Clerk publishable key, `API_PROXY_TARGET`); the Vite dev server proxies `/v1` to the gateway. `web/go.mod` exists only so `go ./...` never walks `node_modules`.
+
+api-gateway env (compose sets them): `REST_ADDR=:8080` (REST + ops, TLS via `TLS_CERT_FILE`/`TLS_KEY_FILE`, `TLS_FALLBACK_HTTP=true` serves HTTP when the mkcert cert is absent), `HTTP_ADDR=:8081` (ops only, container healthcheck), `GRPC_ADDR=:9092`, `ALERTS_ADDR`, `CORS_ALLOWED_ORIGINS`, `CLERK_ISSUER`, `CLERK_JWKS_URL` (default `<issuer>/.well-known/jwks.json`), `CLERK_AUTHORIZED_PARTIES`, `STATUS_WINDOW` (1h), `WATCH_POLL_INTERVAL`. Empty `CLERK_ISSUER` = public RPCs only. REST reference: `docs/README.md`.
 
 Alerts gRPC: `docker run --rm --network host fullstorydev/grpcurl:v1.9.3 -plaintext -d '{"segment_id":"seg-01"}' localhost:3135 sumpnet.alerts.v1.AlertService/ListActiveAlerts` (reflection is on).
 
@@ -71,6 +77,13 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 ## Privacy invariants (ADR 0005)
 
 - Per-home data is served only on owner-scoped paths: the caller's Clerk subject must be linked in `home_owners`. Public views aggregate to segments through `internal/privacy` only (`MinHomes = 3`; suppressed aggregates zero every number, including live cycle rate and alert count). Unlinked devices never count as reporting homes.
+
+## Gateway invariants (api-gateway, ADR 0006)
+
+- The gateway's pool is read-only (`default_transaction_read_only`); alert acknowledgement is an ownership check plus `AlertService.Acknowledge`. Gateway SQL lives in `internal/store/queries/query.sql`.
+- Owner RPCs take the Clerk subject from the auth interceptor only; a home or alert the caller does not own is `NOT_FOUND`. An `authorization` header that is not a valid token is `UNAUTHENTICATED` even on public RPCs. Tests use `internal/auth/authtest`, never real Clerk.
+- REST is grpc-gateway proxying to the gateway's own gRPC listener over loopback, so every rule runs once for both transports. Add RPCs to `query.proto` additively (`./bin/buf breaking --against '.git#branch=main'`).
+- `WatchNeighbourhood`: statuses and storm events are public; an alert is routed only to subscribers owning its home (checked at send time). Segment status windows end at the neighbourhood clock (newest linked-device event time, clamped to now), so replays animate.
 
 ## Architecture
 
@@ -126,4 +139,4 @@ Registered in `~/.claude/PORTS.md` under `### sumpnet` and set in `deploy/compos
 | Postgres 16 + pg_partman | 5444 | `POSTGRES_PORT` |
 | alerts gRPC (no auth until Phase 5) | 3135 | `ALERTS_GRPC_PORT` |
 
-Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (pool equipment; nothing sumpnet-related publishes there); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. HTTPS via `dev.ecoworks.ca:<port>` is deferred to Phase 5; Phase 0/1 endpoints are plain HTTP on localhost.
+Container-internal ports stay at defaults (8080, 1883, 5432). Host 1883 belongs to the unrelated home-assistant Mosquitto (pool equipment; nothing sumpnet-related publishes there); 3132 belongs to another project. 8xxx is blocked on the host, so never publish ChirpStack on 8080. The api-gateway REST port is HTTPS (`https://dev.ecoworks.ca:3134`, shared mkcert cert mounted from `~/Code/.traefik/certs`) and the Vite dashboard serves `https://dev.ecoworks.ca:3034`; the other host ports stay plain HTTP/TCP on localhost.
