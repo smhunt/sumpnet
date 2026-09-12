@@ -15,8 +15,9 @@ WHERE r.updated_at > @after AND r.updated_at <= bound.hi
 ORDER BY r.updated_at, r.source, r.station_id, r.ts;
 
 -- name: ListStormEventsOverlapping :many
+-- Storms whose [started_at, ended_at] meets [from_ts, to_ts); open storms reach forward indefinitely.
 SELECT * FROM storm_events
-WHERE started_at < @to_ts AND coalesce(ended_at, 'infinity'::timestamptz) > @from_ts
+WHERE started_at < @to_ts::timestamptz AND coalesce(ended_at, 'infinity'::timestamptz) > @from_ts::timestamptz
 ORDER BY started_at, id;
 
 -- name: InsertStormEvent :one

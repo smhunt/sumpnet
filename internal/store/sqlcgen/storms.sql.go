@@ -251,15 +251,16 @@ func (q *Queries) ListLinkedHouseDevices(ctx context.Context) ([]ListLinkedHouse
 
 const listStormEventsOverlapping = `-- name: ListStormEventsOverlapping :many
 SELECT id, started_at, ended_at, total_rain_mm, peak_intensity_mm_h, rain_source, status, inserted_at, updated_at FROM storm_events
-WHERE started_at < $1 AND coalesce(ended_at, 'infinity'::timestamptz) > $2
+WHERE started_at < $1::timestamptz AND coalesce(ended_at, 'infinity'::timestamptz) > $2::timestamptz
 ORDER BY started_at, id
 `
 
 type ListStormEventsOverlappingParams struct {
 	ToTs   time.Time
-	FromTs sql.NullTime
+	FromTs time.Time
 }
 
+// Storms whose [started_at, ended_at] meets [from_ts, to_ts); open storms reach forward indefinitely.
 func (q *Queries) ListStormEventsOverlapping(ctx context.Context, arg ListStormEventsOverlappingParams) ([]StormEvent, error) {
 	rows, err := q.db.Query(ctx, listStormEventsOverlapping, arg.ToTs, arg.FromTs)
 	if err != nil {

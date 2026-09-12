@@ -64,6 +64,7 @@ type Querier interface {
 	ListReadingsForDevice(ctx context.Context, arg ListReadingsForDeviceParams) ([]Reading, error)
 	// Devices silent longer than the given number of seconds (wall clock).
 	ListStaleDevices(ctx context.Context, afterSeconds float64) ([]ListStaleDevicesRow, error)
+	// Storms whose [started_at, ended_at] meets [from_ts, to_ts); open storms reach forward indefinitely.
 	ListStormEventsOverlapping(ctx context.Context, arg ListStormEventsOverlappingParams) ([]StormEvent, error)
 	ListStormSummariesForDevice(ctx context.Context, arg ListStormSummariesForDeviceParams) ([]ListStormSummariesForDeviceRow, error)
 	MarkRaiseNotification(ctx context.Context, arg MarkRaiseNotificationParams) error

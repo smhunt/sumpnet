@@ -242,6 +242,8 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Segments rainfall into storm events and computes per-home lag, recession,
+  # volume and baseflow (ADR 0003 consumer of rainfall and telemetry).
   storm-analytics:
     <<: *go-service
     build:
@@ -251,10 +253,19 @@ services:
         SERVICE: storm-analytics
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      DATABASE_URL: postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      POLL_INTERVAL: 30s
+      WATERMARK_LAG: 5s
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
+  # Rain gauge uplinks -> rainfall, plus the ECCC hourly poller (outbound HTTPS
+  # to api.weather.gc.ca; WEATHER_ECCC_ENABLED=false turns it off).
   weather:
     <<: *go-service
     build:
@@ -264,9 +275,21 @@ services:
         SERVICE: weather
         VERSION: ${VERSION:-dev}
         COMMIT: ${COMMIT:-unknown}
+    environment:
+      <<: *go-env
+      DATABASE_URL: postgres://sumpnet:${POSTGRES_PASSWORD}@postgres:5432/sumpnet?sslmode=disable
+      POLL_INTERVAL: 30s
+      WATERMARK_LAG: 5s
+      WEATHER_ECCC_ENABLED: ${WEATHER_ECCC_ENABLED:-true}
+      WEATHER_ECCC_STATION: ${WEATHER_ECCC_STATION:-6144478}
+      WEATHER_ECCC_POLL_INTERVAL: ${WEATHER_ECCC_POLL_INTERVAL:-1h}
+      WEATHER_ECCC_BACKFILL: ${WEATHER_ECCC_BACKFILL:-168h}
+      WEATHER_ECCC_LOOKBACK: ${WEATHER_ECCC_LOOKBACK:-48h}
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   alerts:
     <<: *go-service
