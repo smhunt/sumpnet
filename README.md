@@ -66,6 +66,16 @@ Wi-Fi transport (`mqtt-bridge`, [`docs/node-mqtt.md`](docs/node-mqtt.md)); both 
 managed by pg_partman, and signals downstream services with `LISTEN/NOTIFY`. MQTT messages are
 acknowledged only after the database commit, so a crash means redelivery, never loss.
 
+## Detection and alerts
+
+`cycle-detector` and `alerts` follow ADR 0003: they `LISTEN` for ingest's hint and poll by a
+persisted watermark, committing their writes with it. The detector annotates every cycle with
+its estimated volume and applies the §10 rules (dry run, short cycling — including from storm-mode
+summaries — and continuous run); `alerts` turns node alarms, heartbeat conditions and detections
+into one open alert per device and condition, resolves them on the evidence, emails an operator
+through a transactional SMTP provider (Resend by default; `make alerts-testmail` checks delivery),
+and serves `alerts.v1.AlertService`.
+
 ## The simulator
 
 `cmd/simulator` is a deterministic model of a neighbourhood: 60 homes across 8 street segments
@@ -86,7 +96,7 @@ against known answers.
 | 0 — Scaffold (module, compose stack, CI) | done |
 | 1 — Contracts + simulator | done |
 | 2 — Ingest path | done |
-| 3 — Cycle detection + alerts | planned |
+| 3 — Cycle detection + alerts | done |
 | 4 — Weather + storm analytics | planned |
 | 5 — API gateway + dashboard | planned |
 | 6 — MCP server | planned |

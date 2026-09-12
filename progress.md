@@ -3,11 +3,54 @@
 ## Status
 Phase: **0 — Scaffold** — DONE 2026-09-11 (all acceptance criteria met, CI run 34634272184 green)
 
-Phase: **2 — Ingest path** — DONE 2026-09-11 (acceptance below; branch `phase-2/ingest`)
+Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below; branch `phase-3/alerts`)
 
-Next phase: **3 — Cycle detection + alerts**. Do not start until the Phase 2 PR is merged.
+Next phase: **4 — Weather + storm analytics**. Do not start until the Phase 3 PR is merged. Open inputs: rain-gauge fPort (§14), per-owner email (§14).
 
 ## Session log (newest first)
+
+### 2026-09-11 (Phase 3, branch `phase-3/alerts`)
+- Decisions with owner: real SMTP via a transactional provider (creds in
+  `.env` only; empty `SMTP_HOST` = log only); every WARNING+ alert to one
+  operator address `ALERTS_TO`; per-owner routing deferred (§14).
+- Migration 0003: `alerts` (one open row per device+code, event-time
+  timestamps, notify state machines), `detections`, `consumer_watermarks`,
+  `inserted_at` indexes. sqlc queries for polling, alerts, homes.
+- `internal/watermark`: ADR 0003 consumer (LISTEN hint, lag-bounded
+  group-complete polls, transactional watermark, Reset on rollback).
+- `internal/hydrology`: §10 verbatim, pure, 100% covered.
+- `internal/detector`: est_volume (NULL for unlinked devices; backfill query),
+  dry-run / continuous-run / short-cycling detections; **finding:** a hard
+  short-cycler trips the node's storm mode so its cycles arrive only as
+  fPort 4 summaries — the detector now applies the rule to summaries too
+  (mean interval ≤ 60 s ⇔ count ≥ 15 per 900 s).
+- `internal/alerts`: engine + rules (node alarms, heartbeats incl. the
+  Phase 3 outage-risk form, detections, OFFLINE sweep), stdlib SMTP notifier
+  (STARTTLS/implicit TLS/PLAIN, deterministic Message-ID, resolve mails for
+  CRITICAL), delivery loop with retries, AlertService gRPC (+ reflection).
+- **Finding:** sources are consumed at different watermark positions, so the
+  same episode can be seen out of event-time order across tables; `raised_at`
+  is now the earliest trigger and a stale row cannot resolve a newer episode
+  (ADR 0003 addendum).
+- Compose: cycle-detector/alerts env, alerts gRPC on host **3135** (registered).
+
+#### Phase 3 acceptance
+- [x] `internal/e2e` (testcontainers, all services in-process): failing-pump
+  (12 homes, 4 d) → DRY_RUN home 9 (still open), SHORT_CYCLING home 11,
+  CONTINUOUS_RUN home 7; alert sets equal an oracle computed from the emitted
+  events; first raises within 2 simulated minutes of their trigger; volumes
+  within 6% of the simulator's truth; gRPC list/ack/NotFound; one notification
+  per WARNING+ row. outage (24 homes) → MAINS_LOST for exactly the 6 affected
+  homes within 2 min, resolved on the first mains-ok heartbeat; FLOAT_HIGH and
+  OUTAGE_RISK as expected. ~25 s.
+- [x] Live stack: `make up` (migrate to 0003, cycle-detector + alerts healthy),
+  failing-pump replay (7,949 events) → consumers caught up (5,568 readings,
+  97 alarms, 5 detections); alerts: FLOAT_HIGH ×2, DRY_RUN, CONTINUOUS_RUN
+  (resolved), SHORT_CYCLING (detector, resolved), plus 12 OFFLINE from the
+  wall-clock sweep — expected when replaying April data live. Volumes are NULL
+  and `ListActiveAlerts{segment}` is empty because live devices are unlinked
+  (documented). SMTP unset locally → log-only notifier, 17 raise + 1 resolve
+  notifications recorded in metrics.
 
 ### 2026-09-11 (Phase 2, branch `phase-2/ingest`)
 - Decisions with owner: nodes are ESP32-S3 + SX1262 (LoRaWAN deployed path,

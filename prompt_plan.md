@@ -179,7 +179,9 @@ Internal service-to-service events: start with Postgres `LISTEN/NOTIFY` for simp
 - `rainfall` (source, station_id, ts, mm) — rain gauges + ECCC
 - `storm_events` (id, started_at, ended_at, total_rain_mm, peak_intensity_mm_h)
 - `home_storm_metrics` (storm_id, home_id, lag_min, recession_min, volume_l, cycles)
-- `alerts` (id, home_id, code, raised_at, acked_at, resolved_at)
+- `alerts` (id, device_id, home_id (snapshot, NULL until linked), code, severity, raised_at, last_seen_at, acked_at, resolved_at, resolve_reason, message, notify state) — one open row per (device, code)
+- `detections` (device_id, code, action raise|clear, observed_at, f_cnt) — cycle-detector → alerts hand-off
+- `consumer_watermarks` (consumer, source, inserted_at) — ADR 0003 pollers
 
 Estimated volume per cycle = `pit_area_m2 × (level_end_mm − level_start_mm) / 1000 × 1000 L`. An 18" basin is about 0.164 m².
 
@@ -187,14 +189,15 @@ Estimated volume per cycle = `pit_area_m2 × (level_end_mm − level_start_mm) /
 
 - **Cycle**: current above threshold for ≥ 3 s with level drop ≥ 20 mm.
 - **Dry run**: current on ≥ 30 s with level drop < 5 mm → failed pump or stuck check valve.
-- **Short cycling**: consecutive cycles < 60 s apart for ≥ 5 cycles → check valve or float issue.
+- **Short cycling**: consecutive cycles < 60 s apart (idle gap between runs) for ≥ 5 cycles → check valve or float issue. In storm mode the node only reports fPort 4 summaries, so the equivalent test on a summary is mean interval ≤ 60 s (count ≥ 15 per 900 s window).
 - **Continuous run**: current on > 10 min.
 - **Baseflow**: median dry-weather cycles/day (no rain for 72 h) → water-table indicator.
 - **Storm event**: rainfall ≥ 5 mm total with gaps < 6 h.
 - **Response lag**: time from rain onset (≥ 1 mm/h) to cycle rate > 2× baseflow.
 - **Recession**: time from rain end to cycle rate back within 1.2× baseflow.
 - **Segment load**: sum of storm volume per segment ÷ homes reporting (only if ≥ 3 homes).
-- **Outage risk**: mains_lost AND level rising AND rain in last 6 h → alert owner, then opted-in neighbours.
+- **Outage risk**: mains_lost AND level rising AND rain in last 6 h → alert owner, then opted-in neighbours. Phase 3 form: mains lost and the sensor distance strictly decreasing over 3 heartbeats within 1 h by ≥ 10 mm; the rain term is added in Phase 4.
+- **Severities**: CRITICAL = float_high, dry_run, continuous_run, outage_risk; WARNING = mains_lost, sensor_fault, short_cycling, low_battery, offline.
 
 ## 11. External data
 
@@ -227,8 +230,8 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - **Accept:** integration test (testcontainers) ingests a full simulated storm with zero loss and no duplicates.
 
 ### Phase 3 — Cycle detection + alerts
-- [ ] `cycle-detector` computes est_volume, dry-run, short-cycling, continuous-run
-- [ ] `alerts` service: raise/ack/resolve, dedupe window, email via SMTP (SMS later)
+- [x] `cycle-detector` computes est_volume, dry-run, short-cycling, continuous-run
+- [x] `alerts` service: raise/ack/resolve, dedupe window, email via SMTP (SMS later)
 - **Accept:** failing-pump and outage scenarios raise the correct alerts within 2 simulated minutes.
 
 ### Phase 4 — Weather + storm analytics
@@ -280,3 +283,4 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - [ ] Should the simulator's hydrology model be calibrated against the first real storm before any public numbers are shared?
 - [ ] Licence: MIT vs AGPL for the platform; firmware separate?
 - [ ] Rain-gauge node uplink format: §5 defines no fPort for tipping-bucket gauges. Define (fPort 5?) before Phase 4.
+- [ ] Per-owner alert email needs a decryption scheme for `homes.owner_contact_encrypted` (and auth); Phase 3 emails a single operator address.

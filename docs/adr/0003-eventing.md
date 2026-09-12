@@ -33,3 +33,21 @@ latency, never data.
 - **SQS/SNS** — AWS-only; breaks the local-first rule.
 - **Redis Streams** — the instance is ChirpStack's, with its persistence settings.
 - **Kafka** — far more than one neighbourhood needs.
+
+## Addendum (Phase 3, 2026-09-11): how consumers actually poll
+
+`internal/watermark` implements this ADR. Three details matter:
+
+- `inserted_at` is `DEFAULT now()` = transaction start, so all rows of one ingest
+  batch share a value and become visible at commit, *later* than that value.
+  A poll therefore excludes rows younger than `WATERMARK_LAG` (5 s by default;
+  it must exceed the longest ingest transaction — watch
+  `sumpnet_ingest_batch_seconds`) and never splits an `inserted_at` group.
+- Poll, handler writes and the watermark update commit in one transaction, so
+  side effects are effectively exactly-once; a rollback discards in-memory
+  handler state (`Reset`).
+- Sources are consumed at independent watermark positions, so one episode can
+  be observed out of event-time order across tables (a node alarm before the
+  heartbeat that confirms it, or after). The alerts engine keeps `raised_at`
+  as the earliest trigger and refuses to resolve an alert with a row older than
+  its raise.

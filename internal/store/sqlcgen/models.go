@@ -70,6 +70,38 @@ type AlarmEvent struct {
 	InsertedAt time.Time
 }
 
+type Alert struct {
+	ID                    uuid.UUID
+	DeviceID              string
+	HomeID                uuid.NullUUID
+	Code                  int16
+	Severity              int16
+	RaisedAt              time.Time
+	LastSeenAt            time.Time
+	Occurrences           int32
+	AckedAt               sql.NullTime
+	AckNote               pgtype.Text
+	ResolvedAt            sql.NullTime
+	ResolveReason         pgtype.Text
+	Message               string
+	Source                string
+	TriggerKey            string
+	NotifyState           string
+	NotifyAttempts        int32
+	NotifiedAt            sql.NullTime
+	ResolveNotifyState    string
+	ResolveNotifyAttempts int32
+	UpdatedAt             time.Time
+	InsertedAt            time.Time
+}
+
+type ConsumerWatermark struct {
+	Consumer   string
+	Source     string
+	InsertedAt time.Time
+	UpdatedAt  time.Time
+}
+
 type CycleEvent struct {
 	DeviceID     string
 	StartedAt    time.Time
@@ -89,6 +121,16 @@ type CycleEvent struct {
 	InsertedAt   time.Time
 }
 
+type Detection struct {
+	DeviceID   string
+	Code       int16
+	Action     int16
+	ObservedAt time.Time
+	FCnt       int64
+	Detail     []byte
+	InsertedAt time.Time
+}
+
 type Device struct {
 	DevEui      string
 	HomeID      uuid.NullUUID
@@ -102,7 +144,7 @@ type Device struct {
 type Home struct {
 	ID                    uuid.UUID
 	SegmentID             pgtype.Text
-	PitAreaM2             pgtype.Numeric
+	PitAreaM2             sql.NullFloat64
 	ConsentAt             sql.NullTime
 	OwnerContactEncrypted []byte
 	CreatedAt             time.Time

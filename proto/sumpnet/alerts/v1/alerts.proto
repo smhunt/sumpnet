@@ -54,6 +54,9 @@ message Alert {
   google.protobuf.Timestamp acked_at = 7;
   google.protobuf.Timestamp resolved_at = 8;
   string message = 9;
+  // Pseudonymous DevEUI, so alerts on devices not yet linked to a home are
+  // still actionable by an operator.
+  string device_id = 10;
 }
 
 message ListActiveAlertsRequest {
