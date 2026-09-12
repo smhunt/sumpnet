@@ -1,5 +1,6 @@
 -- name: UpsertSegment :exec
-INSERT INTO segments (id, name, kind) VALUES (@id, @name, @kind)
+-- An empty kind means 'standard' so callers that predate segments.kind keep working.
+INSERT INTO segments (id, name, kind) VALUES (@id, @name, coalesce(nullif(@kind::text, ''), 'standard'))
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind;
 
 -- name: UpsertHome :one
