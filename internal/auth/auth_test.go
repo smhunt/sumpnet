@@ -164,7 +164,7 @@ func TestConfigFromEnv(t *testing.T) {
 		{name: "loopback http", env: map[string]string{"CLERK_ISSUER": "http://127.0.0.1:9999"}, enabled: true, wantSkew: 5 * time.Second},
 		{name: "plain http", env: map[string]string{"CLERK_ISSUER": "http://clerk.example.com"}, wantErr: true},
 		{name: "http jwks", env: map[string]string{"CLERK_ISSUER": "https://clerk.example.com", "CLERK_JWKS_URL": "http://clerk.example.com/jwks"}, wantErr: true},
-		{name: "parties without issuer", env: map[string]string{"CLERK_AUTHORIZED_PARTIES": "https://x"}, wantErr: true},
+		{name: "parties without issuer stay disabled", env: map[string]string{"CLERK_AUTHORIZED_PARTIES": "https://x"}, parties: 1, wantSkew: 5 * time.Second},
 		{name: "bad skew", env: map[string]string{"CLERK_ISSUER": "https://clerk.example.com", "CLERK_CLOCK_SKEW": "soon"}, wantErr: true},
 		{name: "relative issuer", env: map[string]string{"CLERK_ISSUER": "clerk.example.com"}, wantErr: true},
 	}

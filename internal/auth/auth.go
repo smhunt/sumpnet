@@ -81,10 +81,7 @@ func (c Config) jwksURL() string {
 
 func (c Config) validate() error {
 	if !c.Enabled() {
-		if c.JWKSURL != "" || len(c.AuthorizedParties) > 0 {
-			return errors.New("auth: CLERK_JWKS_URL / CLERK_AUTHORIZED_PARTIES set without CLERK_ISSUER")
-		}
-		return nil
+		return nil // CLERK_JWKS_URL / CLERK_AUTHORIZED_PARTIES are ignored without an issuer
 	}
 	if err := secureURL("CLERK_ISSUER", c.Issuer); err != nil {
 		return err
