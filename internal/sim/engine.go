@@ -29,6 +29,9 @@ type Config struct {
 	Identity Identity
 	// Duration overrides the scenario's duration when non-zero (shorter runs).
 	Duration time.Duration
+	// RainGauges is the number of tipping-bucket gauge nodes (fPort 5) at the
+	// ends of the neighbourhood; the pilot has 2 (§4). 0 = none.
+	RainGauges int
 }
 
 // Engine runs one scenario for one set of homes.
@@ -37,6 +40,7 @@ type Engine struct {
 	duration time.Duration
 	segments []SegmentParams
 	homes    []*home
+	gauges   []*gauge
 	rain     []float64 // mm/h per virtual minute
 	pacer    *Pacer
 	seq      uint64
@@ -53,6 +57,9 @@ func New(cfg Config) (*Engine, error) {
 	}
 	if cfg.Homes <= 0 || cfg.Segments <= 0 || cfg.Segments > cfg.Homes {
 		return nil, fmt.Errorf("sim: need 1 <= segments (%d) <= homes (%d)", cfg.Segments, cfg.Homes)
+	}
+	if cfg.RainGauges < 0 {
+		return nil, fmt.Errorf("sim: rain gauges must be >= 0, got %d", cfg.RainGauges)
 	}
 	if cfg.Start.IsZero() {
 		return nil, errors.New("sim: start time is required")
@@ -77,6 +84,9 @@ func New(cfg Config) (*Engine, error) {
 			e.homes[idx] = newHome(idx, &seg, cfg.Scenario, cfg.Seed, nSteps)
 		}
 	}
+	for i := 0; i < cfg.RainGauges; i++ {
+		e.gauges = append(e.gauges, newGauge(i, cfg.Seed))
+	}
 	e.pacer = NewPacer(cfg.Start.UTC(), cfg.Speed)
 	return e, nil
 }
@@ -93,8 +103,22 @@ func (e *Engine) Homes() []HomeParams {
 	return out
 }
 
-// SegmentOf returns the segment ID of a home (for sinks).
-func (e *Engine) SegmentOf(homeIndex int) string { return e.homes[homeIndex].p.SegmentID }
+// RainGauges returns the rain gauge node parameters.
+func (e *Engine) RainGauges() []RainGaugeParams {
+	out := make([]RainGaugeParams, len(e.gauges))
+	for i, g := range e.gauges {
+		out[i] = g.p
+	}
+	return out
+}
+
+// SegmentOf returns the segment ID of a home (for sinks); "" for rain gauges.
+func (e *Engine) SegmentOf(homeIndex int) string {
+	if homeIndex < 0 || homeIndex >= len(e.homes) {
+		return ""
+	}
+	return e.homes[homeIndex].p.SegmentID
+}
 
 // Duration is the effective run length.
 func (e *Engine) Duration() time.Duration { return e.duration }
@@ -143,17 +167,30 @@ func (e *Engine) Run(ctx context.Context, sink Sink) (*Truth, error) {
 		}
 		for _, h := range e.homes {
 			buf = h.step(step, now, rainAt, e.mainsOK(h.seg.Index, step), buf[:0])
-			for _, ev := range buf {
-				ev.Seq = e.seq
-				e.seq++
-				if err := sink.Publish(ctx, ev); err != nil {
-					return e.truth(start, step, false), fmt.Errorf("sim: publish seq %d: %w", ev.Seq, err)
-				}
-				e.events++
+			if err := e.publish(ctx, sink, buf); err != nil {
+				return e.truth(start, step, false), err
+			}
+		}
+		for _, g := range e.gauges {
+			buf = g.step(step, now, rainAt, buf[:0])
+			if err := e.publish(ctx, sink, buf); err != nil {
+				return e.truth(start, step, false), err
 			}
 		}
 	}
 	return e.truth(start, min(step, nSteps), runErr == nil), runErr
+}
+
+func (e *Engine) publish(ctx context.Context, sink Sink, evs []Event) error {
+	for _, ev := range evs {
+		ev.Seq = e.seq
+		e.seq++
+		if err := sink.Publish(ctx, ev); err != nil {
+			return fmt.Errorf("sim: publish seq %d: %w", ev.Seq, err)
+		}
+		e.events++
+	}
+	return nil
 }
 
 func (e *Engine) truth(start time.Time, step int, completed bool) *Truth {
@@ -176,6 +213,12 @@ func (e *Engine) truth(start time.Time, step int, completed bool) *Truth {
 	if endMin >= len(e.rain) {
 		endMin = len(e.rain) - 1
 	}
+	// Per-minute home state (rate, storm inflow) is recorded at the first
+	// second of each minute the run actually stepped through.
+	lastMin := -1
+	if step > 0 {
+		lastMin = min((step-1)/60, endMin)
+	}
 	t.Rainfall = make([]RainSample, endMin+1)
 	for m := 0; m <= endMin; m++ {
 		t.Rainfall[m] = RainSample{TS: start.Add(time.Duration(m) * time.Minute), Mm: e.rain[m] / 60}
@@ -189,9 +232,12 @@ func (e *Engine) truth(start time.Time, step int, completed bool) *Truth {
 			PeakMmPerH: w.peak,
 		}
 		for _, h := range e.homes {
-			st.Homes = append(st.Homes, homeStormTruth(h, w, start, endMin))
+			st.Homes = append(st.Homes, homeStormTruth(h, w, start, lastMin))
 		}
 		t.Storms = append(t.Storms, st)
+	}
+	for _, g := range e.gauges {
+		t.RainGauges = append(t.RainGauges, g.truth())
 	}
 	for _, h := range e.homes {
 		t.TrueCycles = append(t.TrueCycles, h.cycles...)

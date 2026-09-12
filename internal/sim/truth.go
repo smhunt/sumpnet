@@ -23,7 +23,9 @@ type Truth struct {
 	Homes    []HomeParams    `json:"homes"`
 	// Rainfall is one sample per virtual minute (what the rain gauges see).
 	Rainfall []RainSample `json:"rainfall"`
-	Storms   []StormTruth `json:"storms"`
+	// RainGauges is what each gauge node counted (empty without gauges).
+	RainGauges []RainGaugeTruth `json:"rain_gauges,omitempty"`
+	Storms     []StormTruth     `json:"storms"`
 	// TrueCycles is every pump run, including those folded into storm summaries.
 	TrueCycles     []CycleTruth `json:"true_cycles"`
 	ExpectedAlarms []AlarmTruth `json:"expected_alarms"`
@@ -133,7 +135,10 @@ func findStorms(rain []float64) []stormWindowMin {
 }
 
 // homeStormTruth applies the §10 lag/recession definitions to one home.
-func homeStormTruth(h *home, w stormWindowMin, start time.Time, endMin int) HomeStormTruth {
+// lastMin is the last minute whose rate was recorded; a threshold not
+// reached by then is -1 (never reached before the scenario ended).
+func homeStormTruth(h *home, w stormWindowMin, start time.Time, lastMin int) HomeStormTruth {
+	endMin := lastMin
 	base := h.baseflowCPD
 	t := HomeStormTruth{HomeIndex: h.p.Index, LagMin: -1, RecessionMin: -1, LagMinDiscrete: -1, RecessionMinDiscrete: -1, EnteredStormMode: h.enteredStorm}
 

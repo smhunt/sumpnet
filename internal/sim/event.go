@@ -28,6 +28,11 @@ type Event struct {
 	RSSI      [2]int32   `json:"rssi"`
 	SNR       [2]float32 `json:"snr"`
 	DedupID   string     `json:"dedup_id"`
+	// Kind is empty for house nodes and DeviceKindRain for rain gauges, whose
+	// HomeIndex is -1. Both fields are omitted for house nodes so their
+	// canonical JSON (and the stream hash) is unchanged by gauges existing.
+	Kind       string `json:"kind,omitempty"`
+	DeviceName string `json:"device_name,omitempty"`
 }
 
 // Identity is the ChirpStack tenant/application the simulated devices belong to.
@@ -64,6 +69,13 @@ func (e Event) ChirpStackEvent(id Identity, segmentID string) *integration.Uplin
 			Metadata:  map[string]string{"region_common_name": "US915", "region_config_id": "us915_0"},
 		}
 	}
+	profileID, profile := "6f5b0f1e-0000-4000-8000-000000000001", "rak4631-house-node-v1"
+	name := fmt.Sprintf("sim-home-%02d", e.HomeIndex)
+	tags := map[string]string{"sim": "true", "segment": segmentID}
+	if e.Kind == DeviceKindRain {
+		profileID, profile, name = "6f5b0f1e-0000-4000-8000-000000000002", "rain-gauge-node-v1", e.DeviceName
+		tags = map[string]string{"sim": "true", "kind": DeviceKindRain}
+	}
 	return &integration.UplinkEvent{
 		DeduplicationId: e.DedupID,
 		Time:            timestamppb.New(e.Time),
@@ -72,11 +84,11 @@ func (e Event) ChirpStackEvent(id Identity, segmentID string) *integration.Uplin
 			TenantName:        id.TenantName,
 			ApplicationId:     id.ApplicationID,
 			ApplicationName:   id.ApplicationName,
-			DeviceProfileId:   "6f5b0f1e-0000-4000-8000-000000000001",
-			DeviceProfileName: "rak4631-house-node-v1",
-			DeviceName:        fmt.Sprintf("sim-home-%02d", e.HomeIndex),
+			DeviceProfileId:   profileID,
+			DeviceProfileName: profile,
+			DeviceName:        name,
 			DevEui:            e.DevEUI,
-			Tags:              map[string]string{"sim": "true", "segment": segmentID},
+			Tags:              tags,
 		},
 		DevAddr:   e.DevAddr,
 		Adr:       true,

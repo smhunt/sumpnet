@@ -40,6 +40,7 @@ func run(args []string) int {
 		homes        = fs.Int("homes", 60, "number of homes")
 		segments     = fs.Int("segments", 8, "number of street segments")
 		duration     = fs.Duration("duration", 0, "override the scenario duration")
+		rainGauges   = fs.Int("rain-gauges", 2, "tipping-bucket rain gauge nodes (fPort 5) at the ends of the neighbourhood")
 		sinkName     = fs.String("sink", "stdout", "where events go: stdout, mqtt or none")
 		mqttURL      = fs.String("mqtt-url", "mqtt://localhost:3133", "broker URL for -sink mqtt")
 		qos          = fs.Uint("qos", 1, "MQTT QoS (ChirpStack itself uses 0)")
@@ -90,7 +91,7 @@ func run(args []string) int {
 
 	engine, err := sim.New(sim.Config{
 		Seed: *seed, Start: startAt, Speed: *speed, Homes: *homes, Segments: *segments,
-		Scenario: scn, Identity: identity, Duration: *duration,
+		Scenario: scn, Identity: identity, Duration: *duration, RainGauges: *rainGauges,
 	})
 	if err != nil {
 		log.Error("configure", "err", err)
@@ -125,7 +126,7 @@ func run(args []string) int {
 		return 2
 	}
 
-	log.Info("starting", "scenario", scn.Name, "seed", *seed, "homes", *homes, "segments", *segments,
+	log.Info("starting", "scenario", scn.Name, "seed", *seed, "homes", *homes, "segments", *segments, "rain_gauges", *rainGauges,
 		"duration", engine.Duration(), "speed", *speed, "sink", *sinkName)
 	began := time.Now()
 	truth, runErr := engine.Run(ctx, sinks)
