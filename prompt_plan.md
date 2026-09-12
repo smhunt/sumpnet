@@ -94,6 +94,17 @@ Codes: 1 float_high, 2 mains_lost, 3 dry_run, 4 continuous_run, 5 sensor_fault.
 
 **Storm mode:** if more than 6 cycles occur within 15 min, stop sending individual fPort 2 events and roll cycles into a summary (fPort 4: count, total_run_s, max_peak_current_da, min_level_mm) to protect airtime.
 
+**fPort 5 — rain gauge (unconfirmed), 11 bytes** (device kind `rain`; decided 2026-09-12)
+| Field | Type | Unit |
+|---|---|---|
+| tip_count | uint32 | tips since boot (cumulative) |
+| mm_per_tip_um | uint16 | µm of rain per tip (200 = 0.2 mm) |
+| interval_s | uint16 | seconds since the previous uplink |
+| batt_mv | uint16 | mV |
+| flags | uint8 | bit0 counter_reset (rebooted since last uplink), bit1 sensor_fault |
+
+Transmit every 5 min while tips are being counted, every 15 min otherwise. The server stores the raw uplink and derives rainfall from consecutive `tip_count` deltas, so a lost uplink loses no rain; after `counter_reset` the delta is the new `tip_count`.
+
 **Wi-Fi transport (bench/dev nodes):** the same payload bytes, published over MQTT to `sumpnet/v1/{dev_eui}/up` (QoS 1) as `{"fcnt":N,"fport":P,"data":"<base64>","t":<unix s, optional>,"rssi":<dBm, optional>}`. `mqtt-bridge` decodes it with the same `internal/codec`. Spec: `docs/node-mqtt.md`.
 
 ## 6. Repo layout
@@ -173,12 +184,13 @@ Internal service-to-service events: start with Postgres `LISTEN/NOTIFY` for simp
 
 - `homes` (id uuid, segment_id, pit_area_m2, consent_at, owner_contact_encrypted)
 - `devices` (dev_eui, home_id, kind, installed_at)
-- `segments` (id, name, geometry — street segment polygon)
+- `segments` (id, name, kind standard|wooded|near_pond|high_ground, geometry — street segment polygon)
 - `readings` (device_id, ts, level_mm, temp_c, rh, batt_mv, flags) — partitioned monthly
 - `cycle_events` (device_id, started_at, run_s, peak_current_a, level_start_mm, level_end_mm, pump_id, est_volume_l) — partitioned monthly
-- `rainfall` (source, station_id, ts, mm) — rain gauges + ECCC
-- `storm_events` (id, started_at, ended_at, total_rain_mm, peak_intensity_mm_h)
-- `home_storm_metrics` (storm_id, home_id, lag_min, recession_min, volume_l, cycles)
+- `rainfall` (source gauge|eccc, station_id, ts interval start, interval_s, mm) — rain gauges + ECCC
+- `storm_events` (id, started_at, ended_at NULL while open, total_rain_mm, peak_intensity_mm_h, rain_source, status open|closed)
+- `home_storm_metrics` (storm_id, home_id, lag_min NULL = never reached, recession_min, volume_l, cycles, baseflow_cpd)
+- `home_owners` (auth_subject = Clerk user id, home_id) — owner scoping for the api-gateway
 - `alerts` (id, device_id, home_id (snapshot, NULL until linked), code, severity, raised_at, last_seen_at, acked_at, resolved_at, resolve_reason, message, notify state) — one open row per (device, code)
 - `detections` (device_id, code, action raise|clear, observed_at, f_cnt) — cycle-detector → alerts hand-off
 - `consumer_watermarks` (consumer, source, inserted_at) — ADR 0003 pollers
@@ -237,7 +249,7 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 ### Phase 4 — Weather + storm analytics
 - [ ] `weather` service polls ECCC, stores rainfall; ingests rain gauge nodes
 - [ ] `storm-analytics` segments storm events and computes `home_storm_metrics`
-- [ ] `internal/privacy` enforces segment k ≥ 3
+- [x] `internal/privacy` enforces segment k ≥ 3 (package + ADR 0005; the api-gateway builds every public view with it)
 - **Accept:** simulated storm produces lag/recession within ±10% of the simulator's ground-truth parameters.
 
 ### Phase 5 — API gateway + dashboard
@@ -279,8 +291,8 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 ## 14. Open questions
 
 - [ ] Gateway sites: which volunteer homes have the best line of sight?
-- [ ] Owner auth: magic link vs Clerk?
+- [x] Owner auth: **Clerk** (gateway verifies Clerk JWTs via JWKS; `home_owners.auth_subject`). Decided 2026-09-12.
 - [ ] Should the simulator's hydrology model be calibrated against the first real storm before any public numbers are shared?
 - [ ] Licence: MIT vs AGPL for the platform; firmware separate?
-- [ ] Rain-gauge node uplink format: §5 defines no fPort for tipping-bucket gauges. Define (fPort 5?) before Phase 4.
+- [x] Rain-gauge node uplink format: **fPort 5, 11 B, cumulative tip counter** (§5). Decided 2026-09-12.
 - [ ] Per-owner alert email needs a decryption scheme for `homes.owner_contact_encrypted` (and auth); Phase 3 emails a single operator address.

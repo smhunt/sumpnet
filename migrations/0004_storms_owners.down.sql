@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS home_owners;
+DROP TABLE IF EXISTS home_storm_metrics;
+DROP TABLE IF EXISTS storm_events;
+DROP TABLE IF EXISTS rainfall;
+ALTER TABLE segments DROP COLUMN IF EXISTS kind;

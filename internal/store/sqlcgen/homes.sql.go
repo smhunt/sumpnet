@@ -54,16 +54,17 @@ func (q *Queries) UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, e
 }
 
 const upsertSegment = `-- name: UpsertSegment :exec
-INSERT INTO segments (id, name) VALUES ($1, $2)
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+INSERT INTO segments (id, name, kind) VALUES ($1, $2, $3)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind
 `
 
 type UpsertSegmentParams struct {
 	ID   string
 	Name string
+	Kind string
 }
 
 func (q *Queries) UpsertSegment(ctx context.Context, arg UpsertSegmentParams) error {
-	_, err := q.db.Exec(ctx, upsertSegment, arg.ID, arg.Name)
+	_, err := q.db.Exec(ctx, upsertSegment, arg.ID, arg.Name, arg.Kind)
 	return err
 }

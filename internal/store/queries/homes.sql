@@ -1,6 +1,6 @@
 -- name: UpsertSegment :exec
-INSERT INTO segments (id, name) VALUES ($1, $2)
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+INSERT INTO segments (id, name, kind) VALUES (@id, @name, @kind)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind;
 
 -- name: UpsertHome :one
 INSERT INTO homes (id, segment_id, pit_area_m2) VALUES ($1, $2, $3)
