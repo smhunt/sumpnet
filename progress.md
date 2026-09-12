@@ -7,7 +7,87 @@ Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below;
 
 Phases **4 — Weather + storm analytics** and **5 — API gateway + dashboard** run in parallel (owner's call, 2026-09-12) on branches `phase-4/weather` and `phase-5/gateway`, both forked from `contracts/phase-4-5`.
 
+Phase: **5 — API gateway + dashboard** — built on `phase-5/gateway` 2026-09-12: acceptance test passing (owner sees own home only, public views aggregate only); the "live storm replay visible on the map" check needs Phase 4 data and a browser check after merge.
+
 ## Session log (newest first)
+
+### 2026-09-12 (Phase 5, branch `phase-5/gateway`)
+- Merged the contracts fix `224bad8` (empty segment kind -> standard) before any DB work.
+- Proto (additive, `buf breaking` vs main passes): `ListSegments`, `ListMyHomes`,
+  `ListMyAlerts`, `AcknowledgeMyAlert` on QueryService; `HomeStormMetrics`
+  gains `lag_reached`, `recession_reached`, `storm_started_at` (a NULL lag is
+  no longer indistinguishable from 0 min). alerts.proto unchanged.
+- `internal/auth`: Clerk session JWTs verified with golang-jwt/jwt/v5 +
+  MicahParks/keyfunc/v3 (RS256, JWKS cache/rotation, iss, exp/nbf/iat, azp);
+  no header = anonymous, bad header = UNAUTHENTICATED; `authtest` serves an
+  in-test JWKS. ADR 0006.
+- `internal/gateway` + `cmd/api-gateway`: gRPC `:9092`, REST via grpc-gateway
+  proxied over loopback to the same gRPC server (**finding:** the in-process
+  grpc-gateway transport cannot stream), optional TLS on `REST_ADDR` with the
+  ops listener moved to `:8081` for the healthcheck, CORS allowlist, pool with
+  `default_transaction_read_only`. Ownership misses are NOT_FOUND. Acknowledge
+  = ownership check + `AlertService.Acknowledge`.
+- WatchNeighbourhood hub: LISTEN hint + ticker, one read-only snapshot per
+  round, status window ending at the **neighbourhood clock** (newest linked
+  event time, clamped to now) so replays animate; statuses via
+  `privacy.AggregateStatus` (reporting = linked homes with a heartbeat in the
+  window, cycles = `cycles_since_last`); storm/alert row versions with a
+  1-minute overlap; alerts routed only to the home's owners; slow subscribers
+  dropped.
+- `internal/seed` + `cmd/seed` + `make seed`: 8 illustrative (not surveyed)
+  segment polygons near Timberwalk matching the simulator's ids/kinds, the
+  simulator's homes and linked devices, optional `DEMO_OWNER_SUBJECT` link.
+- Compose: api-gateway env, mkcert certs mounted read-only with
+  `TLS_FALLBACK_HTTP`, depends on postgres/migrate/alerts. `.env.example`
+  Clerk placeholders. CI `web` job.
+- `web/`: Vite 8 + React 19 + TS 6 + MapLibre 6 + `@clerk/react` 6. Live
+  heatmap from the NDJSON stream, hatched privacy-hidden streets with an
+  explanation (client re-applies k >= 3), staff-gauge storm replay (`#storms`
+  deep link, empty state), street list as the keyboard/mobile alternative,
+  owner home + alerts with acknowledge, About dialog (version, changelog, how
+  it works, roadmap). **Finding:** npm's `flatted` ships `.go` files, so
+  `web/go.mod` keeps `go ./...` out of `node_modules`.
+- Visual smoke (headless Chrome, temporary profile, against a throwaway
+  Postgres container + `cmd/seed` + synthetic readings/storms + the gateway
+  binary on loopback): **findings fixed** — MapLibre 6 loads its worker from a
+  sibling file, which Vite's dep pre-bundling drops and the production build
+  never emitted (no polygons in dev, broken map in prod); now excluded from
+  pre-bundling and set explicitly via a Vite-bundled module worker
+  (`?worker&url`, `dist/assets/maplibre-gl-worker-*.js`). The hatch pattern is
+  supplied through `setMissingStyleImageResolver` (v6 no longer resolves it
+  from `styleimagemissing`); the segments source/layers are part of the initial
+  style so nothing waits for the `load` event. Also: storm/live ledes no longer
+  end in "a.m..", grid children may shrink on narrow screens.
+- Docs: ADR 0006, `docs/README.md` (architecture + REST reference), root
+  `CHANGELOG.md`, CLAUDE.md commands/invariants, README section/status.
+
+#### Phase 5 acceptance
+- [x] `TestPhase5Acceptance` (testcontainers Postgres, in-process gateway and
+  AlertService, httptest JWKS; gRPC and REST): own GetHome ok (health, recent
+  storms); another owner's / unowned / unknown home NOT_FOUND with the same
+  message (404); anonymous owner RPCs UNAUTHENTICATED (401); expired, wrong
+  issuer, wrong azp, forged-key and garbage tokens rejected on owner, public
+  and streaming RPCs (401); GetStormEvent: 2-home segment suppressed (an
+  unlinked device's home does not make it 3), 3-home segment load 600 L,
+  median lag 15, recession 150; storm pages; anonymous streams (gRPC + REST
+  NDJSON) get statuses and storms, never an alert or any home id/DevEUI;
+  each owner's stream gets only their own alert (incl. the acknowledgement
+  update); cross-owner and unlinked acknowledge NOT_FOUND; gateway pool
+  writes fail with 25006; /readyz, /metrics, CORS preflight. ~4 s.
+- [x] `make lint`, `make test`, `go test -race -tags integration ./...` all
+  green; web `npm run lint` (eslint + tsc), `npm test` (14), `npm run build`.
+- [x] HTTPS dev-server smoke: `https://localhost:3034` 200 over TLS (also with
+  the dev.ecoworks.ca Host header), plain HTTP refused. Against a throwaway
+  Postgres + seed + gateway: `/v1/segments`, `/v1/storm-events` and the
+  NDJSON stream through the Vite proxy (seg-05/seg-07 at 2 homes suppressed);
+  screenshots at 1440 and 500 px show OSM tiles, streets coloured by cycles
+  per hour, hatched hidden streets, legend, gauge and street list. All smoke
+  processes and the container were stopped afterwards.
+- [ ] Live storm replay on the map: needs Phase 4 `storm_events` /
+  `home_storm_metrics` and a browser check against `make up` after merge.
+- To check at merge: the mkcert `key.pem` is mode 0600 on the host; confirm
+  the distroless nonroot gateway can read the bind mount (otherwise it logs a
+  TLS fallback warning and serves plain HTTP on 3134).
 
 ### 2026-09-12 (Resend, PR #4 merge, Phase 4/5 contracts)
 - Resend plugin (skills) installed. Alert email goes through Resend SMTP
