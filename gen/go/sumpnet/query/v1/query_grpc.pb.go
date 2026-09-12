@@ -23,6 +23,10 @@ const (
 	QueryService_ListStormEvents_FullMethodName    = "/sumpnet.query.v1.QueryService/ListStormEvents"
 	QueryService_GetStormEvent_FullMethodName      = "/sumpnet.query.v1.QueryService/GetStormEvent"
 	QueryService_WatchNeighbourhood_FullMethodName = "/sumpnet.query.v1.QueryService/WatchNeighbourhood"
+	QueryService_ListSegments_FullMethodName       = "/sumpnet.query.v1.QueryService/ListSegments"
+	QueryService_ListMyHomes_FullMethodName        = "/sumpnet.query.v1.QueryService/ListMyHomes"
+	QueryService_ListMyAlerts_FullMethodName       = "/sumpnet.query.v1.QueryService/ListMyAlerts"
+	QueryService_AcknowledgeMyAlert_FullMethodName = "/sumpnet.query.v1.QueryService/AcknowledgeMyAlert"
 )
 
 // QueryServiceClient is the client API for QueryService service.
@@ -30,9 +34,11 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // QueryService is the read API used by the dashboard and the MCP server.
-// Privacy rules (prompt_plan.md §2) are enforced here, not by callers:
-// per-home data is owner-scoped and segment aggregates are suppressed when
-// fewer than 3 homes report.
+// Privacy rules (prompt_plan.md §2, ADR 0005) are enforced here, not by
+// callers: per-home data is owner-scoped and segment aggregates are suppressed
+// when fewer than 3 homes report. Owner identity comes from a Clerk session
+// JWT in the `authorization: Bearer <jwt>` metadata / HTTP header; public
+// RPCs accept anonymous callers, owner RPCs return UNAUTHENTICATED without it.
 type QueryServiceClient interface {
 	// GetHome is owner-scoped: a caller only ever sees their own home.
 	GetHome(ctx context.Context, in *GetHomeRequest, opts ...grpc.CallOption) (*GetHomeResponse, error)
@@ -41,7 +47,19 @@ type QueryServiceClient interface {
 	GetStormEvent(ctx context.Context, in *GetStormEventRequest, opts ...grpc.CallOption) (*GetStormEventResponse, error)
 	// WatchNeighbourhood streams live segment status, storm events and alerts.
 	// Over REST (grpc-gateway) this is newline-delimited JSON.
+	// Anonymous subscribers receive segment status and storm events only;
+	// alert updates go only to an authenticated owner, for their own homes.
 	WatchNeighbourhood(ctx context.Context, in *WatchNeighbourhoodRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WatchNeighbourhoodResponse], error)
+	// ListSegments is the public street-segment catalogue the map draws.
+	ListSegments(ctx context.Context, in *ListSegmentsRequest, opts ...grpc.CallOption) (*ListSegmentsResponse, error)
+	// ListMyHomes lists the homes linked to the authenticated owner.
+	ListMyHomes(ctx context.Context, in *ListMyHomesRequest, opts ...grpc.CallOption) (*ListMyHomesResponse, error)
+	// ListMyAlerts lists active alerts on the authenticated owner's homes.
+	ListMyAlerts(ctx context.Context, in *ListMyAlertsRequest, opts ...grpc.CallOption) (*ListMyAlertsResponse, error)
+	// AcknowledgeMyAlert acknowledges an alert on one of the owner's homes. The
+	// gateway checks ownership, then proxies to alerts.v1.AlertService (the
+	// single writer of alerts). An alert the caller does not own is NOT_FOUND.
+	AcknowledgeMyAlert(ctx context.Context, in *AcknowledgeMyAlertRequest, opts ...grpc.CallOption) (*AcknowledgeMyAlertResponse, error)
 }
 
 type queryServiceClient struct {
@@ -101,14 +119,56 @@ func (c *queryServiceClient) WatchNeighbourhood(ctx context.Context, in *WatchNe
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type QueryService_WatchNeighbourhoodClient = grpc.ServerStreamingClient[WatchNeighbourhoodResponse]
 
+func (c *queryServiceClient) ListSegments(ctx context.Context, in *ListSegmentsRequest, opts ...grpc.CallOption) (*ListSegmentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListSegmentsResponse)
+	err := c.cc.Invoke(ctx, QueryService_ListSegments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryServiceClient) ListMyHomes(ctx context.Context, in *ListMyHomesRequest, opts ...grpc.CallOption) (*ListMyHomesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyHomesResponse)
+	err := c.cc.Invoke(ctx, QueryService_ListMyHomes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryServiceClient) ListMyAlerts(ctx context.Context, in *ListMyAlertsRequest, opts ...grpc.CallOption) (*ListMyAlertsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListMyAlertsResponse)
+	err := c.cc.Invoke(ctx, QueryService_ListMyAlerts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryServiceClient) AcknowledgeMyAlert(ctx context.Context, in *AcknowledgeMyAlertRequest, opts ...grpc.CallOption) (*AcknowledgeMyAlertResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcknowledgeMyAlertResponse)
+	err := c.cc.Invoke(ctx, QueryService_AcknowledgeMyAlert_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // QueryServiceServer is the server API for QueryService service.
 // All implementations must embed UnimplementedQueryServiceServer
 // for forward compatibility.
 //
 // QueryService is the read API used by the dashboard and the MCP server.
-// Privacy rules (prompt_plan.md §2) are enforced here, not by callers:
-// per-home data is owner-scoped and segment aggregates are suppressed when
-// fewer than 3 homes report.
+// Privacy rules (prompt_plan.md §2, ADR 0005) are enforced here, not by
+// callers: per-home data is owner-scoped and segment aggregates are suppressed
+// when fewer than 3 homes report. Owner identity comes from a Clerk session
+// JWT in the `authorization: Bearer <jwt>` metadata / HTTP header; public
+// RPCs accept anonymous callers, owner RPCs return UNAUTHENTICATED without it.
 type QueryServiceServer interface {
 	// GetHome is owner-scoped: a caller only ever sees their own home.
 	GetHome(context.Context, *GetHomeRequest) (*GetHomeResponse, error)
@@ -117,7 +177,19 @@ type QueryServiceServer interface {
 	GetStormEvent(context.Context, *GetStormEventRequest) (*GetStormEventResponse, error)
 	// WatchNeighbourhood streams live segment status, storm events and alerts.
 	// Over REST (grpc-gateway) this is newline-delimited JSON.
+	// Anonymous subscribers receive segment status and storm events only;
+	// alert updates go only to an authenticated owner, for their own homes.
 	WatchNeighbourhood(*WatchNeighbourhoodRequest, grpc.ServerStreamingServer[WatchNeighbourhoodResponse]) error
+	// ListSegments is the public street-segment catalogue the map draws.
+	ListSegments(context.Context, *ListSegmentsRequest) (*ListSegmentsResponse, error)
+	// ListMyHomes lists the homes linked to the authenticated owner.
+	ListMyHomes(context.Context, *ListMyHomesRequest) (*ListMyHomesResponse, error)
+	// ListMyAlerts lists active alerts on the authenticated owner's homes.
+	ListMyAlerts(context.Context, *ListMyAlertsRequest) (*ListMyAlertsResponse, error)
+	// AcknowledgeMyAlert acknowledges an alert on one of the owner's homes. The
+	// gateway checks ownership, then proxies to alerts.v1.AlertService (the
+	// single writer of alerts). An alert the caller does not own is NOT_FOUND.
+	AcknowledgeMyAlert(context.Context, *AcknowledgeMyAlertRequest) (*AcknowledgeMyAlertResponse, error)
 	mustEmbedUnimplementedQueryServiceServer()
 }
 
@@ -139,6 +211,18 @@ func (UnimplementedQueryServiceServer) GetStormEvent(context.Context, *GetStormE
 }
 func (UnimplementedQueryServiceServer) WatchNeighbourhood(*WatchNeighbourhoodRequest, grpc.ServerStreamingServer[WatchNeighbourhoodResponse]) error {
 	return status.Error(codes.Unimplemented, "method WatchNeighbourhood not implemented")
+}
+func (UnimplementedQueryServiceServer) ListSegments(context.Context, *ListSegmentsRequest) (*ListSegmentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListSegments not implemented")
+}
+func (UnimplementedQueryServiceServer) ListMyHomes(context.Context, *ListMyHomesRequest) (*ListMyHomesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyHomes not implemented")
+}
+func (UnimplementedQueryServiceServer) ListMyAlerts(context.Context, *ListMyAlertsRequest) (*ListMyAlertsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListMyAlerts not implemented")
+}
+func (UnimplementedQueryServiceServer) AcknowledgeMyAlert(context.Context, *AcknowledgeMyAlertRequest) (*AcknowledgeMyAlertResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcknowledgeMyAlert not implemented")
 }
 func (UnimplementedQueryServiceServer) mustEmbedUnimplementedQueryServiceServer() {}
 func (UnimplementedQueryServiceServer) testEmbeddedByValue()                      {}
@@ -226,6 +310,78 @@ func _QueryService_WatchNeighbourhood_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type QueryService_WatchNeighbourhoodServer = grpc.ServerStreamingServer[WatchNeighbourhoodResponse]
 
+func _QueryService_ListSegments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListSegmentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServiceServer).ListSegments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueryService_ListSegments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServiceServer).ListSegments(ctx, req.(*ListSegmentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueryService_ListMyHomes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyHomesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServiceServer).ListMyHomes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueryService_ListMyHomes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServiceServer).ListMyHomes(ctx, req.(*ListMyHomesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueryService_ListMyAlerts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListMyAlertsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServiceServer).ListMyAlerts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueryService_ListMyAlerts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServiceServer).ListMyAlerts(ctx, req.(*ListMyAlertsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _QueryService_AcknowledgeMyAlert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcknowledgeMyAlertRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServiceServer).AcknowledgeMyAlert(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: QueryService_AcknowledgeMyAlert_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServiceServer).AcknowledgeMyAlert(ctx, req.(*AcknowledgeMyAlertRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // QueryService_ServiceDesc is the grpc.ServiceDesc for QueryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -244,6 +400,22 @@ var QueryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStormEvent",
 			Handler:    _QueryService_GetStormEvent_Handler,
+		},
+		{
+			MethodName: "ListSegments",
+			Handler:    _QueryService_ListSegments_Handler,
+		},
+		{
+			MethodName: "ListMyHomes",
+			Handler:    _QueryService_ListMyHomes_Handler,
+		},
+		{
+			MethodName: "ListMyAlerts",
+			Handler:    _QueryService_ListMyAlerts_Handler,
+		},
+		{
+			MethodName: "AcknowledgeMyAlert",
+			Handler:    _QueryService_AcknowledgeMyAlert_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
