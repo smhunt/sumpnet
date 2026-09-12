@@ -7,7 +7,55 @@ Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below;
 
 Phases **4 — Weather + storm analytics** and **5 — API gateway + dashboard** run in parallel (owner's call, 2026-09-12) on branches `phase-4/weather` and `phase-5/gateway`, both forked from `contracts/phase-4-5`.
 
+Phase: **4 — Weather + storm analytics** — work items done 2026-09-12 on `phase-4/weather`; acceptance: recession ±10 % met for every home, lag ±10 % not reachable for fast homes (data resolution) — the e2e accepts ±10 % or 15 min, pending the owner's decision (prompt_plan §14).
+
 ## Session log (newest first)
+
+### 2026-09-12 (Phase 4, branch `phase-4/weather`)
+- Merged `contracts/phase-4-5` fix 224bad8 (empty segment kind) before the first DB commit.
+- **Codec** fPort 5 rain gauge (11 B) with three golden vectors; fuzz/round-trip.
+- **Simulator** rain gauges: 2 nodes (kind `rain`, DevEUI `70b3d57ed1…`), 0.2 mm tips from the true
+  minute series, 5-min wake / 15-min dry cadence, counter_reset on first uplink, own PCG streams.
+  `sim.Config.RainGauges` defaults to 0 — with 0 gauges the Phase 1 hash is still
+  `4d88f34a…4a24` (storm50 × 60) and failing-pump seed 5 × 12 is still `bb4578a2…7d7e`; the CLI and
+  `testpipeline.NewSim` use 2 (storm50 seed 42 × 60 → `e530369a…21df`, 14,076 events). New scenarios
+  `storm25-long` / `storm50-long` (3-day dry lead, 3-day tail).
+- **Truth bug fixed:** the last minute of a run has no rate sample (read 0), so `recession_min` was
+  "end of scenario − rain end" (961 / 721) for every home that had not receded; now −1.
+- **Finding:** `lag_min_discrete` saturates — one cycle in its 30-min window is 48 cycles/day, above
+  2× baseflow for any baseflow < 24 — so it measures time-to-next-cycle (0 min for several homes).
+  Acceptance uses `lag_min` / `recession_min`.
+- **Ingest**: `SubmitRainGaugeReadings`, migration 0005 (`rain_gauge_uplinks` partitioned monthly,
+  `rainfall(updated_at)` index), bulk path, bridges; auto-registered senders get the table's device kind.
+- **weather**: gauge consumer + ECCC GeoMet poller. Verified: LONDON CS 6144478 has populated hourly
+  precipitation (LONDON A 6144473 is null throughout; nothing closer reports hourly); `PRECIP_AMOUNT` at
+  `UTC_DATE` is the hour ending then (hourly sums over (06Z, 06Z] match climate-daily totals on every
+  boundary-rain day; hour-beginning does not). Recorded GeoMet pages for tests.
+- **hydrology**: storms (station intervals for onset/end, 5-min bins for totals), baseflow (median of
+  per-interval dry-weather rates), water-balance inflow rate, lag, recession, AnalyseHomeStorm,
+  SegmentLoad. **storm-analytics** (ADR 0007): recompute-from-source consumer, NOTIFY `storm_events`.
+  **alerts**: OUTAGE_RISK rain term (missing rainfall data count as rain).
+- **Estimator evidence** (in memory, sim events → hydrology, 60 homes, 1-min grid, 20-min / 2-h windows):
+  storm25-long seed 42: lag within ±10 % 38/60, recession 59/60; storm50-long seed 42: 38/60, 60/60;
+  seed 7: 40/60, 60/60 and 43/60, 58/60 (recession misses at 10.4–11.3 %). |lag error| median 3–4 min,
+  max ~13 min (one 21.7); the crossing error with the *true* onset is just as large, i.e. the
+  15-min heartbeat localisation dominates, with gauge onset (0.2 mm tips) adding up to +5 min on
+  slow-ramping storms. Hypothetical 5-min heartbeats + true onset: 44–47/60. Tried and rejected:
+  isotonic smoothing (no gain), interpolated cumulative inflow (4–13 of 24 homes), interpolating crossings
+  across rate holes (e2e 7/16, median 7.1 min).
+- **Finding:** `volume_l` = Σ §9 est volumes understates storm inflow up to ~2.6× where inflow nears
+  pump capacity (inflow during runs is not a level drop); cycle counts match truth exactly (§14).
+
+#### Phase 4 acceptance (`TestPhase4StormAcceptance`, storm50-long seed 42 × 16 homes, ECCC off, ~11 s)
+- Storm: onset +4m44s, rain end −5m30s, total 50.00 mm (truth 50.11), peak 15.2 mm/h (15.8), source
+  gauge, closed. Baseflow within 3 % for every home (≤ 1.1 %).
+- Per home (truth → estimate): lag 94→94.0, 91→84.0, 52→55.0, 23→24.0, 73→78.0, 90→83.0, 42→49.0,
+  30→21.0, 17→12.0, 16→8.0, 104→103.0, 55→44.0, 66→62.0, 87→89.0, 74→70.6, 96→89.0 (11/16 within
+  ±10 %, all within 15 min, median |error| 5.0 min); recession errors +0.8, −0.0, +0.3, +7.1, +4.7,
+  +2.8, +2.2, −0.8, −1.8, +6.7, −1.4, +4.2, +3.7, +3.0, −2.4, −0.4 % (16/16 within ±10 %).
+- `make lint`, `make test`, `-tags integration ./...` green (one testcontainers reaper start-up flake
+  in `TestPipelineStorm` under the parallel run, green on rerun). Live stack not exercised (`make up`
+  shares the running stack's ports; not run in this session).
 
 ### 2026-09-12 (Resend, PR #4 merge, Phase 4/5 contracts)
 - Resend plugin (skills) installed. Alert email goes through Resend SMTP

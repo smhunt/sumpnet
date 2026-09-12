@@ -76,12 +76,31 @@ into one open alert per device and condition, resolves them on the evidence, ema
 through a transactional SMTP provider (Resend by default; `make alerts-testmail` checks delivery),
 and serves `alerts.v1.AlertService`.
 
+## Weather and storm analytics
+
+Two tipping-bucket rain gauge nodes at opposite ends of the neighbourhood report a cumulative tip
+counter on fPort 5. `weather` turns consecutive counters into rainfall rows (a lost uplink loses no
+rain) and polls ECCC's hourly observations for LONDON CS through the MSC GeoMet API as the fallback
+and cross-check. `storm-analytics` segments the rain into storm events (≥ 5 mm, gaps < 6 h) and
+computes each home's response — lag, recession, volume, cycles and the baseflow they were measured
+against — from a water balance of pit levels and pump cycles, recomputing from the database whenever
+rain or telemetry change, so replays and late data converge ([ADR 0007](docs/adr/0007-storm-analytics.md)).
+The results are checked against the simulator's ground truth in `internal/e2e/phase4_integration_test.go`:
+recession within ±10 % for every home, lag within ±10 % or one 15-minute heartbeat interval.
+
+```bash
+# Replay a 50 mm storm with a 3-day dry lead (baseflow history) and a 3-day tail (recession):
+make sim SCENARIO=storm50-long SEED=42 SPEED=0 HOMES=16
+# ECCC polling needs outbound HTTPS; set WEATHER_ECCC_ENABLED=false in deploy/compose/.env for replays.
+```
+
 ## The simulator
 
 `cmd/simulator` is a deterministic model of a neighbourhood: 60 homes across 8 street segments
 (standard, wooded, near the pond, high ground), each with its own pit geometry, baseflow,
 rain-response lag, recession time and pump health. Rainfall scenarios (`dry-week`, `storm25`,
-`storm50`, `thaw50`, `outage`, `failing-pump`) drive a linear-reservoir hydrology model; an
+`storm50`, `storm25-long`, `storm50-long`, `thaw50`, `outage`, `failing-pump`) drive a linear-reservoir hydrology model,
+two rain gauge nodes (`-rain-gauges`, default 2) report what fell, and an
 emulated node firmware turns the resulting pump cycles into the same binary payloads the real
 RAK4631 nodes will send, including storm-mode roll-ups and alarms.
 
@@ -97,7 +116,7 @@ against known answers.
 | 1 — Contracts + simulator | done |
 | 2 — Ingest path | done |
 | 3 — Cycle detection + alerts | done |
-| 4 — Weather + storm analytics | planned |
+| 4 — Weather + storm analytics | done (lag tolerance pending, see prompt_plan §14) |
 | 5 — API gateway + dashboard | planned |
 | 6 — MCP server | planned |
 | 7 — Firmware + first real nodes | planned |
