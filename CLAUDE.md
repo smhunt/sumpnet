@@ -33,6 +33,7 @@ make sim SCENARIO=storm50 SEED=42 SPEED=60  # replay into the stack's Mosquitto;
 make migrate-up / migrate-down / migrate-new NAME=x   # golang-migrate against the compose DB (from .env)
 make sqlc                                    # regenerate internal/store/sqlcgen (committed; CI runs sqlc diff)
 make db-shell                                # psql into the compose Postgres
+make alerts-testmail                         # one test email through the SMTP provider in .env (Resend)
 ```
 
 Alerts gRPC: `docker run --rm --network host fullstorydev/grpcurl:v1.9.3 -plaintext -d '{"segment_id":"seg-01"}' localhost:3135 sumpnet.alerts.v1.AlertService/ListActiveAlerts` (reflection is on).
@@ -65,7 +66,7 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - The alerts service is the single writer of `alerts`. One open row per (device, code) (partial unique index); a new episode is a new row; `raised_at` is the earliest trigger across sources; a row from a lagging source cannot resolve a newer episode.
 - `cycle-detector` → `alerts` goes through the `detections` table (idempotent PK), never in-process.
 - §10 rules live in `internal/hydrology` (pure); storm-mode summaries carry the short-cycling test in aggregate (`SummaryShortCycling`).
-- Email: real provider SMTP from `.env` (`SMTP_HOST/PORT/USER/PASSWORD/FROM`, `ALERTS_TO`); empty `SMTP_HOST` = log only. `SMTP_PASSWORD` is an API key — never commit `.env`. Tests use Mailpit via testcontainers, never real mail.
+- Email: real provider SMTP from `.env` (`SMTP_HOST/PORT/USER/PASSWORD/FROM`, `ALERTS_TO`); empty `SMTP_HOST` = log only. The provider is **Resend** over SMTP (`smtp.resend.com`, port 465, user `resend`, password = Resend API key, `SMTP_FROM` on a Resend-verified domain). `SMTP_PASSWORD` is an API key — never commit `.env`, never paste it into chat. `make alerts-testmail` sends one delivery check. Tests use Mailpit via testcontainers, never real mail.
 
 ## Architecture
 

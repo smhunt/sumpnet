@@ -73,7 +73,8 @@ persisted watermark, committing their writes with it. The detector annotates eve
 its estimated volume and applies the §10 rules (dry run, short cycling — including from storm-mode
 summaries — and continuous run); `alerts` turns node alarms, heartbeat conditions and detections
 into one open alert per device and condition, resolves them on the evidence, emails an operator
-through a transactional SMTP provider, and serves `alerts.v1.AlertService`.
+through a transactional SMTP provider (Resend by default; `make alerts-testmail` checks delivery),
+and serves `alerts.v1.AlertService`.
 
 ## The simulator
 

@@ -1,21 +1,52 @@
 // Command alerts raises, acknowledges and resolves alerts from node alarms,
 // heartbeats and cycle-detector output, emails an operator, and serves
 // alerts.v1.AlertService.
+//
+// `alerts testmail` sends one delivery check through the configured SMTP
+// provider and exits; it needs only the SMTP_* and ALERTS_TO variables.
 package main
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/smhunt/sumpnet/internal/alerts"
 	"github.com/smhunt/sumpnet/internal/platform"
 )
 
-func main() { os.Exit(platform.Run("alerts", run)) }
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "testmail" {
+		os.Exit(testmail())
+	}
+	os.Exit(platform.Run("alerts", run))
+}
+
+func testmail() int {
+	cfg, err := alerts.SMTPConfigFromEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "testmail:", err)
+		return 1
+	}
+	if cfg.Host == "" {
+		fmt.Fprintln(os.Stderr, "testmail: SMTP_HOST is empty; set SMTP_* and ALERTS_TO in deploy/compose/.env")
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout+5*time.Second)
+	defer cancel()
+	n := alerts.NewNotifier(cfg, slog.New(slog.NewJSONHandler(os.Stderr, nil)))
+	if err := n.Notify(ctx, alerts.TestMessage(time.Now())); err != nil {
+		fmt.Fprintln(os.Stderr, "testmail:", err)
+		return 1
+	}
+	fmt.Printf("testmail: sent via %s:%d to %s\n", cfg.Host, cfg.Port, strings.Join(cfg.To, ", "))
+	return 0
+}
 
 func run(ctx context.Context, app *platform.App) error {
 	dsn := os.Getenv("DATABASE_URL")

@@ -241,8 +241,23 @@ func MessageID(m Message) string {
 	return fmt.Sprintf("<alert-%s.%s@sumpnet.local>", m.AlertID, m.Event)
 }
 
+// EventTest marks the delivery check sent by `alerts testmail`.
+const EventTest = "test"
+
+// TestMessage is a delivery check that exercises the configured SMTP path
+// (for example Resend) without touching the database.
+func TestMessage(now time.Time) Message {
+	return Message{
+		AlertID: uuid.New(), Event: EventTest, DeviceID: "none", At: now,
+		Body: "This is a sumpnet delivery check. If you can read it, alert email works.",
+	}
+}
+
 // Subject builds the subject line.
 func Subject(m Message) string {
+	if m.Event == EventTest {
+		return "[sumpnet] test email: SMTP delivery check"
+	}
 	where := "device " + m.DeviceID
 	if m.HomeID != nil {
 		where = fmt.Sprintf("home %s", m.HomeID.String()[:8])
@@ -266,10 +281,16 @@ func FormatMessage(m Message, from string, to []string, now time.Time) []byte {
 	w("Content-Type: text/plain; charset=utf-8")
 	w("Content-Transfer-Encoding: 8bit")
 	w("X-Sumpnet-Alert-Id: " + m.AlertID.String())
-	w("X-Sumpnet-Code: " + CodeName(m.Code))
+	if m.Event == EventTest {
+		w("X-Sumpnet-Code: TEST")
+	} else {
+		w("X-Sumpnet-Code: " + CodeName(m.Code))
+	}
 	w("")
-	w(fmt.Sprintf("Alert %s: %s (%s)", m.Event, CodeName(m.Code), SeverityName(m.Severity)))
-	w("")
+	if m.Event != EventTest {
+		w(fmt.Sprintf("Alert %s: %s (%s)", m.Event, CodeName(m.Code), SeverityName(m.Severity)))
+		w("")
+	}
 	w("Time (UTC):      " + m.At.UTC().Format(time.RFC3339))
 	if loc, err := time.LoadLocation("America/Toronto"); err == nil {
 		w("Time (Toronto):  " + m.At.In(loc).Format("2006-01-02 15:04:05 MST"))

@@ -234,3 +234,21 @@ func get(s []string, i int) string {
 	}
 	return "<missing>"
 }
+
+func TestTestMessageFormat(t *testing.T) {
+	now := time.Date(2026, 9, 12, 14, 0, 0, 0, time.UTC)
+	m := TestMessage(now)
+	if m.Event != EventTest || m.AlertID == uuid.Nil {
+		t.Fatalf("TestMessage = %+v", m)
+	}
+	if got := Subject(m); got != "[sumpnet] test email: SMTP delivery check" {
+		t.Errorf("Subject = %q", got)
+	}
+	body := string(FormatMessage(m, "alerts@example.com", []string{"ops@example.com"}, now))
+	if strings.Contains(body, "UNSPECIFIED") || !strings.Contains(body, "delivery check") {
+		t.Errorf("body:\n%s", body)
+	}
+	if !strings.Contains(body, "Message-ID: <alert-"+m.AlertID.String()+".test@sumpnet.local>") {
+		t.Errorf("missing Message-ID:\n%s", body)
+	}
+}

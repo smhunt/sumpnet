@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell
+.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail
 
 all: lint test
 
@@ -101,6 +101,10 @@ sqlc: $(SQLC)
 
 db-shell: env
 	$(COMPOSE) exec postgres psql -U sumpnet -d sumpnet
+
+## alerts-testmail: send one delivery check through the SMTP provider in .env (Resend by default)
+alerts-testmail: env
+	$(COMPOSE) run --rm --no-deps --build alerts testmail
 
 ## env: create deploy/compose/.env from the example if missing
 env:
