@@ -22,6 +22,7 @@ const (
 	PortCycleEvent   uint8 = 2
 	PortAlarm        uint8 = 3
 	PortStormSummary uint8 = 4
+	PortRainGauge    uint8 = 5
 )
 
 // Payload lengths in bytes. US915 DR0 (SF10 @ 125 kHz) caps the application
@@ -32,6 +33,7 @@ const (
 	LenCycleEvent   = 11
 	LenAlarm        = 3
 	LenStormSummary = 9
+	LenRainGauge    = 11
 
 	MaxLen = 11
 )
@@ -80,6 +82,20 @@ const (
 	AlarmSensorFault   AlarmCode = 5
 )
 
+// RainFlags is the fPort 5 flags byte.
+type RainFlags uint8
+
+// Rain gauge flag bits.
+const (
+	RainCounterReset RainFlags = 1 << 0 // the node rebooted since its previous uplink
+	RainSensorFault  RainFlags = 1 << 1
+
+	rainFlagsMask = RainCounterReset | RainSensorFault
+)
+
+// Has reports whether every bit in x is set.
+func (f RainFlags) Has(x RainFlags) bool { return f&x == x }
+
 // Uplink is the sealed union of decoded payloads. Every implementation also
 // implements encoding.BinaryUnmarshaler on its pointer type.
 type Uplink interface {
@@ -126,6 +142,20 @@ type StormSummary struct {
 	MinLevelMM       uint16 // minimum sensor distance = highest water reached
 }
 
+// RainGauge is the fPort 5 tipping-bucket report (11 bytes, device kind
+// "rain"). The counter is cumulative since boot, so the platform derives
+// rainfall from consecutive deltas and a lost uplink loses no rain.
+type RainGauge struct {
+	TipCount   uint32 // tips since boot
+	MMPerTipUM uint16 // µm of rain per tip (200 = 0.2 mm); never 0
+	IntervalS  uint16 // seconds since the previous uplink (since boot after a reset)
+	BattMV     uint16 // mV
+	Flags      RainFlags
+}
+
+// MM is the rainfall represented by n tips.
+func (r *RainGauge) MM(tips uint32) float64 { return float64(tips) * float64(r.MMPerTipUM) / 1000 }
+
 // Port implements Uplink.
 func (*Heartbeat) Port() uint8 { return PortHeartbeat }
 
@@ -138,13 +168,17 @@ func (*Alarm) Port() uint8 { return PortAlarm }
 // Port implements Uplink.
 func (*StormSummary) Port() uint8 { return PortStormSummary }
 
+// Port implements Uplink.
+func (*RainGauge) Port() uint8 { return PortRainGauge }
+
 func (*Heartbeat) sealed()    {}
 func (*CycleEvent) sealed()   {}
 func (*Alarm) sealed()        {}
 func (*StormSummary) sealed() {}
+func (*RainGauge) sealed()    {}
 
 // Decode parses a payload received on fPort. The result is one of *Heartbeat,
-// *CycleEvent, *Alarm or *StormSummary.
+// *CycleEvent, *Alarm, *StormSummary or *RainGauge.
 func Decode(fPort uint8, b []byte) (Uplink, error) {
 	var u interface {
 		Uplink
@@ -159,6 +193,8 @@ func Decode(fPort uint8, b []byte) (Uplink, error) {
 		u = &Alarm{}
 	case PortStormSummary:
 		u = &StormSummary{}
+	case PortRainGauge:
+		u = &RainGauge{}
 	default:
 		return nil, fmt.Errorf("%w: %d", ErrUnknownPort, fPort)
 	}
@@ -309,5 +345,48 @@ func (s *StormSummary) UnmarshalBinary(b []byte) error {
 		MaxPeakCurrentDA: binary.LittleEndian.Uint16(b[5:7]),
 		MinLevelMM:       binary.LittleEndian.Uint16(b[7:9]),
 	}
+	return nil
+}
+
+func checkRain(tipUM uint16, flags RainFlags) error {
+	if tipUM == 0 {
+		return fmt.Errorf("%w: fPort 5: mm_per_tip_um is 0", ErrBadValue)
+	}
+	if flags&^rainFlagsMask != 0 {
+		return fmt.Errorf("%w: fPort 5: flags 0x%02x has undefined bits", ErrBadValue, uint8(flags))
+	}
+	return nil
+}
+
+// MarshalBinary implements encoding.BinaryMarshaler.
+func (r *RainGauge) MarshalBinary() ([]byte, error) {
+	if err := checkRain(r.MMPerTipUM, r.Flags); err != nil {
+		return nil, err
+	}
+	b := make([]byte, LenRainGauge)
+	binary.LittleEndian.PutUint32(b[0:4], r.TipCount)
+	binary.LittleEndian.PutUint16(b[4:6], r.MMPerTipUM)
+	binary.LittleEndian.PutUint16(b[6:8], r.IntervalS)
+	binary.LittleEndian.PutUint16(b[8:10], r.BattMV)
+	b[10] = uint8(r.Flags)
+	return b, nil
+}
+
+// UnmarshalBinary implements encoding.BinaryUnmarshaler.
+func (r *RainGauge) UnmarshalBinary(b []byte) error {
+	if err := checkLen(PortRainGauge, LenRainGauge, b); err != nil {
+		return err
+	}
+	v := RainGauge{
+		TipCount:   binary.LittleEndian.Uint32(b[0:4]),
+		MMPerTipUM: binary.LittleEndian.Uint16(b[4:6]),
+		IntervalS:  binary.LittleEndian.Uint16(b[6:8]),
+		BattMV:     binary.LittleEndian.Uint16(b[8:10]),
+		Flags:      RainFlags(b[10]),
+	}
+	if err := checkRain(v.MMPerTipUM, v.Flags); err != nil {
+		return err
+	}
+	*r = v
 	return nil
 }

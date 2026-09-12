@@ -72,6 +72,30 @@ var golden = []struct {
 		hex:  "0c 84 03 d8 00 47 00 7c 01",
 		want: &StormSummary{Count: 12, WindowS: 900, TotalRunS: 216, MaxPeakCurrentDA: 71, MinLevelMM: 380},
 	},
+	{
+		name: "rain gauge while tipping",
+		port: PortRainGauge,
+		// tips 1234 = 0x000004D2 → d2 04 00 00 | 200 µm/tip = 0x00C8 → c8 00 |
+		// interval 300 s = 0x012C → 2c 01 | batt 3600 = 0x0E10 → 10 0e | flags 0
+		hex:  "d2 04 00 00 c8 00 2c 01 10 0e 00",
+		want: &RainGauge{TipCount: 1234, MMPerTipUM: 200, IntervalS: 300, BattMV: 3600},
+	},
+	{
+		name: "rain gauge after reboot",
+		port: PortRainGauge,
+		// tips 3 → 03 00 00 00 | 254 µm/tip (0.01 in) = 0x00FE → fe 00 |
+		// interval 900 = 0x0384 → 84 03 | batt 3312 = 0x0CF0 → f0 0c | flags 0x01 counter_reset
+		hex:  "03 00 00 00 fe 00 84 03 f0 0c 01",
+		want: &RainGauge{TipCount: 3, MMPerTipUM: 254, IntervalS: 900, BattMV: 3312, Flags: RainCounterReset},
+	},
+	{
+		name: "rain gauge boundary values sensor fault",
+		port: PortRainGauge,
+		// tips 4294967295 → ff ff ff ff | 200 → c8 00 | interval 65535 → ff ff |
+		// batt 0 → 00 00 | flags 0x03 counter_reset|sensor_fault
+		hex:  "ff ff ff ff c8 00 ff ff 00 00 03",
+		want: &RainGauge{TipCount: 4294967295, MMPerTipUM: 200, IntervalS: 65535, Flags: RainCounterReset | RainSensorFault},
+	},
 }
 
 func mustHex(t testing.TB, s string) []byte {
@@ -111,7 +135,7 @@ func TestGoldenVectors(t *testing.T) {
 }
 
 func TestLengthsWithinAirtimeBudget(t *testing.T) {
-	for _, l := range []int{LenHeartbeat, LenCycleEvent, LenAlarm, LenStormSummary} {
+	for _, l := range []int{LenHeartbeat, LenCycleEvent, LenAlarm, LenStormSummary, LenRainGauge} {
 		if l > MaxLen {
 			t.Errorf("payload length %d exceeds the %d-byte US915 DR0 limit", l, MaxLen)
 		}
@@ -119,7 +143,7 @@ func TestLengthsWithinAirtimeBudget(t *testing.T) {
 }
 
 func TestDecodeErrors(t *testing.T) {
-	lens := map[uint8]int{PortHeartbeat: LenHeartbeat, PortCycleEvent: LenCycleEvent, PortAlarm: LenAlarm, PortStormSummary: LenStormSummary}
+	lens := map[uint8]int{PortHeartbeat: LenHeartbeat, PortCycleEvent: LenCycleEvent, PortAlarm: LenAlarm, PortStormSummary: LenStormSummary, PortRainGauge: LenRainGauge}
 	for port, want := range lens {
 		for _, n := range []int{0, want - 1, want + 1} {
 			if _, err := Decode(port, make([]byte, n)); !errors.Is(err, ErrBadLength) {
@@ -127,7 +151,7 @@ func TestDecodeErrors(t *testing.T) {
 			}
 		}
 	}
-	for _, port := range []uint8{0, 5, 200, 255} {
+	for _, port := range []uint8{0, 6, 200, 255} {
 		if _, err := Decode(port, []byte{1, 2, 3}); !errors.Is(err, ErrUnknownPort) {
 			t.Errorf("Decode(port %d) err = %v, want ErrUnknownPort", port, err)
 		}
@@ -143,6 +167,8 @@ func TestDecodeErrors(t *testing.T) {
 		{"cycle pump_id 2", PortCycleEvent, "00 00 00 00 00 00 00 00 00 00 02"},
 		{"alarm code 0", PortAlarm, "00 00 00"},
 		{"alarm code 6", PortAlarm, "06 00 00"},
+		{"rain undefined flag bit", PortRainGauge, "00 00 00 00 c8 00 2c 01 10 0e 04"},
+		{"rain zero mm per tip", PortRainGauge, "01 00 00 00 00 00 2c 01 10 0e 00"},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {
@@ -160,6 +186,8 @@ func TestEncodeRejectsBadValues(t *testing.T) {
 		&CycleEvent{PumpID: 2},
 		&Alarm{Code: 0},
 		&Alarm{Code: 6},
+		&RainGauge{MMPerTipUM: 0},
+		&RainGauge{MMPerTipUM: 200, Flags: 1 << 2},
 	} {
 		if _, _, err := Encode(u); !errors.Is(err, ErrBadValue) {
 			t.Errorf("Encode(%+v) err = %v, want ErrBadValue", u, err)
@@ -171,21 +199,23 @@ func TestEncodeRejectsBadValues(t *testing.T) {
 func randomUplink(r *rand.Rand, kind int) Uplink {
 	u16 := func() uint16 { return uint16(r.Uint32()) }
 	u8 := func() uint8 { return uint8(r.Uint32()) }
-	switch kind % 4 {
+	switch kind % 5 {
 	case 0:
 		return &Heartbeat{LevelMM: u16(), TempCentiC: int16(u16()), RHPct: u8(), BattMV: u16(), CyclesSinceLast: u8(), Flags: Flags(u8()) & flagsMask}
 	case 1:
 		return &CycleEvent{StartOffsetS: u16(), RunS: u16(), PeakCurrentDA: u16(), LevelStartMM: u16(), LevelEndMM: u16(), PumpID: PumpID(u8() % 2)}
 	case 2:
 		return &Alarm{Code: AlarmCode(1 + u8()%5), Value: u16()}
-	default:
+	case 3:
 		return &StormSummary{Count: u8(), WindowS: u16(), TotalRunS: u16(), MaxPeakCurrentDA: u16(), MinLevelMM: u16()}
+	default:
+		return &RainGauge{TipCount: r.Uint32(), MMPerTipUM: max(1, u16()), IntervalS: u16(), BattMV: u16(), Flags: RainFlags(u8()) & rainFlagsMask}
 	}
 }
 
 func TestRoundTrip(t *testing.T) {
 	r := rand.New(rand.NewPCG(42, 0))
-	for i := 0; i < 4000; i++ {
+	for i := 0; i < 5000; i++ {
 		in := randomUplink(r, i)
 		port, b, err := Encode(in)
 		if err != nil {

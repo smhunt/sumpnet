@@ -31,8 +31,8 @@ UTF-8 JSON, one uplink per message:
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `fcnt` | integer ≥ 0 | yes | Frame counter, strictly increasing per device across all ports (same counter the LoRaWAN stack would use). Reset to 0 on reboot is tolerated: the platform's idempotency key is `(dev_eui, event time, fcnt)`. |
-| `fport` | 1–4 | yes | Payload type per §5 (1 heartbeat, 2 cycle event, 3 alarm, 4 storm summary). |
-| `data` | base64 (standard, padded) | yes | The codec bytes. Length must match the port (10 / 11 / 3 / 9). |
+| `fport` | 1–5 | yes | Payload type per §5 (1 heartbeat, 2 cycle event, 3 alarm, 4 storm summary, 5 rain gauge). |
+| `data` | base64 (standard, padded) | yes | The codec bytes. Length must match the port (10 / 11 / 3 / 9 / 11). |
 | `t` | integer, Unix seconds UTC | no | Event time from the node's NTP-synced clock. If absent the bridge uses its receive time and increments `sumpnet_bridge_time_fallback_total`; send it whenever the clock is synced. |
 | `rssi` | integer dBm | no | Wi-Fi RSSI, stored as `rssi_dbm` with `gateway_id = "wifi"`. |
 
