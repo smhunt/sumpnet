@@ -261,3 +261,51 @@ func TestNotify(t *testing.T) {
 		t.Errorf("notification = %+v", n)
 	}
 }
+
+func TestRainGaugeUplinks(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	dev := "70b3d57ed1000000"
+	base := time.Date(2026, 4, 15, 6, 0, 0, 0, time.UTC)
+	rssi := int16(-80)
+	rows := []RainGaugeUplink{
+		{DeviceID: dev, TS: base, FCnt: 0, TipCount: 0, MMPerTip: 0.2, IntervalS: 137, BattMV: 3600, CounterReset: true, Meta: Meta{RSSIDBm: &rssi}},
+		{DeviceID: dev, TS: base.Add(5 * time.Minute), FCnt: 1, TipCount: 7, MMPerTip: 0.254, IntervalS: 300, BattMV: 3598},
+		{DeviceID: dev, TS: time.Date(2025, 11, 2, 0, 0, 0, 0, time.UTC), FCnt: 9, TipCount: 1, MMPerTip: 0.2, IntervalS: 900, SensorFault: true},
+	}
+	if res, err := s.InsertRainGaugeUplinks(ctx, rows); err != nil || res != (Result{Accepted: 3}) {
+		t.Fatalf("insert: %+v %v", res, err)
+	}
+	if res, err := s.InsertRainGaugeUplinks(ctx, rows); err != nil || res != (Result{Duplicates: 3}) {
+		t.Fatalf("replay: %+v %v", res, err)
+	}
+	// Auto-registered as a rain gauge, never as a house node.
+	d, err := s.Queries().GetDevice(ctx, dev)
+	if err != nil || d.Kind != "rain" || d.HomeID.Valid {
+		t.Fatalf("device = %+v %v", d, err)
+	}
+	got, err := s.Queries().ListRainGaugeUplinks(ctx, sqlcgen.ListRainGaugeUplinksParams{DeviceID: dev, FromTs: base, ToTs: base.Add(time.Hour)})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("list = %+v %v", got, err)
+	}
+	if got[0].MmPerTip != 0.2 || got[1].MmPerTip != 0.254 || got[1].TipCount != 7 || !got[0].CounterReset || got[0].RssiDbm.Int16 != -80 || got[1].IntervalS != 300 {
+		t.Errorf("rows = %+v", got)
+	}
+	// The 2025 replay landed in its own partition, not the default one.
+	var inDefault int
+	if qerr := s.pool.QueryRow(ctx, `SELECT count(*) FROM rain_gauge_uplinks_default`).Scan(&inDefault); qerr != nil || inDefault != 0 {
+		t.Fatalf("rows in default partition = %d (%v)", inDefault, qerr)
+	}
+	prev, err := s.Queries().RainGaugeUplinkBefore(ctx, sqlcgen.RainGaugeUplinkBeforeParams{DeviceID: dev, Ts: base.Add(5 * time.Minute)})
+	if err != nil || prev.FCnt != 0 {
+		t.Errorf("before = %+v %v", prev, err)
+	}
+	next, err := s.Queries().RainGaugeUplinkAfter(ctx, sqlcgen.RainGaugeUplinkAfterParams{DeviceID: dev, Ts: base})
+	if err != nil || next.FCnt != 1 {
+		t.Errorf("after = %+v %v", next, err)
+	}
+	stats, err := s.Queries().FCntStatsByDevice(ctx)
+	if err != nil || len(stats) != 1 || stats[0].Rows != 3 {
+		t.Errorf("fcnt stats = %+v %v", stats, err)
+	}
+}

@@ -112,6 +112,19 @@ func TestDecodeAlarmAndSummary(t *testing.T) {
 	}
 }
 
+func TestDecodeRainGauge(t *testing.T) {
+	topic, body := event(t, &codec.RainGauge{TipCount: 1234, MMPerTipUM: 200, IntervalS: 300, BattMV: 3600, Flags: codec.RainCounterReset | codec.RainSensorFault}, nil)
+	d, err := Decode(topic, body, now())
+	if err != nil || d.RainGauge == nil || d.Reading != nil {
+		t.Fatalf("decoded = %+v, %v", d, err)
+	}
+	r := d.RainGauge
+	if r.GetTipCount() != 1234 || r.GetMmPerTip() != 0.2 || r.GetIntervalS() != 300 || r.GetBattMv() != 3600 ||
+		!r.GetCounterReset() || !r.GetSensorFault() || !r.GetTs().AsTime().Equal(evTime) || r.GetMeta().GetFCnt() != 1842 {
+		t.Errorf("rain gauge = %v", r)
+	}
+}
+
 func TestTimeFallbacks(t *testing.T) {
 	gwTime := evTime.Add(2 * time.Second)
 	topic, body := event(t, &codec.Alarm{Code: 1, Value: 1}, func(ev *integration.UplinkEvent) {

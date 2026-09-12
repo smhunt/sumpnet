@@ -47,8 +47,8 @@ func (r *Recorder) Publish(_ context.Context, ev sim.Event) error {
 // Close implements sim.Sink.
 func (r *Recorder) Close(context.Context) error { return nil }
 
-// Counts are the four telemetry table counts plus the summarised cycles.
-type Counts struct{ Readings, Cycles, Summaries, Alarms, SummarisedCycles int64 }
+// Counts are the telemetry table counts plus the summarised cycles.
+type Counts struct{ Readings, Cycles, Summaries, Alarms, SummarisedCycles, RainGauges int64 }
 
 // DBCounts reads the counts.
 func DBCounts(t *testing.T, q *sqlcgen.Queries) Counts {
@@ -71,6 +71,9 @@ func DBCounts(t *testing.T, q *sqlcgen.Queries) Counts {
 	if c.SummarisedCycles, err = q.SumStormSummaryCycles(ctx); err != nil {
 		t.Fatal(err)
 	}
+	if c.RainGauges, err = q.CountRainGaugeUplinks(ctx); err != nil {
+		t.Fatal(err)
+	}
 	return c
 }
 
@@ -89,6 +92,8 @@ func Expected(events []sim.Event) Counts {
 			c.SummarisedCycles += int64(u.(*codec.StormSummary).Count)
 		case codec.PortAlarm:
 			c.Alarms++
+		case codec.PortRainGauge:
+			c.RainGauges++
 		}
 	}
 	return c
@@ -196,10 +201,14 @@ func Counter(t *testing.T, app *platform.App, name string) float64 {
 	return total
 }
 
-// NewSim builds a simulator engine for a built-in scenario.
+// SimRainGauges is how many rain gauge nodes NewSim adds: the pilot's two (§4).
+const SimRainGauges = 2
+
+// NewSim builds a simulator engine for a built-in scenario, with the pilot's
+// rain gauges.
 func NewSim(t *testing.T, scenario string, seed uint64, homes, segments int, duration time.Duration) *sim.Engine {
 	t.Helper()
-	e, err := sim.New(sim.Config{Seed: seed, Start: TestStart, Homes: homes, Segments: segments, Scenario: sim.Scenarios()[scenario], Duration: duration})
+	e, err := sim.New(sim.Config{Seed: seed, Start: TestStart, Homes: homes, Segments: segments, Scenario: sim.Scenarios()[scenario], Duration: duration, RainGauges: SimRainGauges})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +216,8 @@ func NewSim(t *testing.T, scenario string, seed uint64, homes, segments int, dur
 }
 
 // SeedHomes registers the engine's segments, homes and devices so every
-// simulated device is linked to a home with a pit area.
+// simulated house node is linked to a home with a pit area, and the rain
+// gauges are registered as kind rain (they belong to no home).
 func SeedHomes(t *testing.T, st *store.Store, e *sim.Engine) {
 	t.Helper()
 	ctx := context.Background()
@@ -223,6 +233,11 @@ func SeedHomes(t *testing.T, st *store.Store, e *sim.Engine) {
 			t.Fatal(err)
 		}
 		if _, err := q.UpsertDevice(ctx, sqlcgen.UpsertDeviceParams{DevEui: h.DevEUI, Kind: "house", HomeID: uuid.NullUUID{UUID: id, Valid: true}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range e.RainGauges() {
+		if _, err := q.UpsertDevice(ctx, sqlcgen.UpsertDeviceParams{DevEui: g.DevEUI, Kind: sim.DeviceKindRain, Name: pgtype.Text{String: g.Name + " (" + g.Location + ")", Valid: true}}); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -27,6 +27,7 @@ type Store interface {
 	InsertCycleEvents(ctx context.Context, rows []store.CycleEvent) (store.Result, error)
 	InsertStormSummaries(ctx context.Context, rows []store.StormSummary) (store.Result, error)
 	InsertAlarmEvents(ctx context.Context, rows []store.AlarmEvent) (store.Result, error)
+	InsertRainGaugeUplinks(ctx context.Context, rows []store.RainGaugeUplink) (store.Result, error)
 }
 
 // Server implements IngestServiceServer.
@@ -154,6 +155,28 @@ func (s *Server) SubmitAlarms(stream telemetryv1.IngestService_SubmitAlarmsServe
 		return err
 	}
 	return stream.SendAndClose(&telemetryv1.SubmitAlarmsResponse{Accepted: c.accepted, Duplicates: c.duplicates})
+}
+
+// SubmitRainGaugeReadings implements IngestServiceServer.
+func (s *Server) SubmitRainGaugeReadings(stream telemetryv1.IngestService_SubmitRainGaugeReadingsServer) error {
+	c, err := runStream(stream.Context(), s, "rain_gauge_uplinks", stream.Recv,
+		func(req *telemetryv1.SubmitRainGaugeReadingsRequest) []store.RainGaugeUplink {
+			rows := make([]store.RainGaugeUplink, 0, len(req.GetRainGaugeReadings()))
+			for _, r := range req.GetRainGaugeReadings() {
+				row, why := s.rainGaugeRow(r)
+				if why != "" {
+					s.reject("rain_gauge_uplinks", why)
+					continue
+				}
+				rows = append(rows, row)
+			}
+			return rows
+		},
+		s.store.InsertRainGaugeUplinks)
+	if err != nil {
+		return err
+	}
+	return stream.SendAndClose(&telemetryv1.SubmitRainGaugeReadingsResponse{Accepted: c.accepted, Duplicates: c.duplicates})
 }
 
 func (s *Server) reject(kind string, why reject) {

@@ -10,6 +10,9 @@ SELECT count(*) FROM storm_summaries;
 -- name: CountAlarmEvents :one
 SELECT count(*) FROM alarm_events;
 
+-- name: CountRainGaugeUplinks :one
+SELECT count(*) FROM rain_gauge_uplinks;
+
 -- name: SumStormSummaryCycles :one
 SELECT coalesce(sum(cycle_count), 0)::bigint AS cycles FROM storm_summaries;
 
@@ -22,6 +25,7 @@ FROM (
   UNION ALL SELECT device_id, f_cnt FROM cycle_events
   UNION ALL SELECT device_id, f_cnt FROM storm_summaries
   UNION ALL SELECT device_id, f_cnt FROM alarm_events
+  UNION ALL SELECT device_id, f_cnt FROM rain_gauge_uplinks
 ) u
 GROUP BY device_id
 ORDER BY device_id;

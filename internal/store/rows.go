@@ -84,6 +84,20 @@ type AlarmEvent struct {
 	Meta
 }
 
+// RainGaugeUplink is one fPort 5 rain gauge row, stored as reported.
+type RainGaugeUplink struct {
+	DeviceID     string
+	TS           time.Time // event time = end of the reported interval
+	FCnt         int64
+	TipCount     int64
+	MMPerTip     float64
+	IntervalS    int32
+	BattMV       int32
+	CounterReset bool
+	SensorFault  bool
+	Meta
+}
+
 var (
 	readingCols = append([]string{
 		"device_id", "ts", "f_cnt", "level_mm", "temp_c", "rh_pct", "batt_mv", "cycles_since_last",
@@ -97,7 +111,10 @@ var (
 		"device_id", "window_end", "f_cnt", "window_s", "cycle_count", "total_run_s",
 		"max_peak_current_a", "min_level_mm",
 	}, metaCols...)
-	alarmEventCols = append([]string{"device_id", "raised_at", "f_cnt", "code", "value"}, metaCols...)
+	alarmEventCols      = append([]string{"device_id", "raised_at", "f_cnt", "code", "value"}, metaCols...)
+	rainGaugeUplinkCols = append([]string{
+		"device_id", "ts", "f_cnt", "tip_count", "mm_per_tip", "interval_s", "batt_mv", "counter_reset", "sensor_fault",
+	}, metaCols...)
 )
 
 func (r Reading) values() []any {
@@ -123,4 +140,10 @@ func (s StormSummary) values() []any {
 
 func (a AlarmEvent) values() []any {
 	return append([]any{a.DeviceID, a.RaisedAt, a.FCnt, a.Code, a.Value}, a.Meta.values()...)
+}
+
+func (r RainGaugeUplink) values() []any {
+	return append([]any{
+		r.DeviceID, r.TS, r.FCnt, r.TipCount, r.MMPerTip, r.IntervalS, r.BattMV, r.CounterReset, r.SensorFault,
+	}, r.Meta.values()...)
 }

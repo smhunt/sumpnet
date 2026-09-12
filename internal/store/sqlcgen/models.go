@@ -167,6 +167,24 @@ type HomeStormMetric struct {
 	ComputedAt   time.Time
 }
 
+type RainGaugeUplink struct {
+	DeviceID     string
+	Ts           time.Time
+	FCnt         int64
+	TipCount     int64
+	MmPerTip     float64
+	IntervalS    int32
+	BattMv       pgtype.Int4
+	CounterReset bool
+	SensorFault  bool
+	RssiDbm      pgtype.Int2
+	SnrDb        pgtype.Float4
+	Sf           pgtype.Int2
+	GatewayID    pgtype.Text
+	DedupID      uuid.NullUUID
+	InsertedAt   time.Time
+}
+
 type Rainfall struct {
 	Source     string
 	StationID  string

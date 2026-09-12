@@ -20,6 +20,8 @@ type Decoded struct {
 	Cycle   *telemetryv1.CycleEvent
 	Summary *telemetryv1.StormSummary
 	Alarm   *telemetryv1.Alarm
+	// RainGauge is an fPort 5 tipping-bucket report.
+	RainGauge *telemetryv1.RainGaugeReading
 	// TimeFallback is true when the decoder had to use now() as the event time.
 	TimeFallback bool
 }
@@ -147,6 +149,11 @@ func Run(ctx context.Context, app *platform.App, cfg RunConfig, decode Decoder) 
 		return serr
 	})
 
+	rain := NewBatcher("rain_gauge_uplinks", cfg.Batch, m, log, func(c context.Context, rows []*telemetryv1.RainGaugeReading) error {
+		_, serr := client.SubmitRainGaugeReadings(c, rows)
+		return serr
+	})
+
 	// Batchers outlive the consumer so they can drain after intake stops.
 	bctx, stopBatchers := context.WithCancel(context.Background())
 	defer stopBatchers()
@@ -154,6 +161,7 @@ func Run(ctx context.Context, app *platform.App, cfg RunConfig, decode Decoder) 
 	g.Go(func() error { return readings.Run(gctx) })
 	g.Go(func() error { return cycles.Run(gctx) })
 	g.Go(func() error { return alarms.Run(gctx) })
+	g.Go(func() error { return rain.Run(gctx) })
 
 	handler := func(hctx context.Context, topic string, payload []byte, ack func() error) {
 		d, derr := decode(topic, payload, time.Now())
@@ -185,6 +193,8 @@ func Run(ctx context.Context, app *platform.App, cfg RunConfig, decode Decoder) 
 			aerr = cycles.Add(hctx, Envelope[cycleMsg]{Msg: cycleMsg{summary: d.Summary}, Ack: ack})
 		case d.Alarm != nil:
 			aerr = alarms.Add(hctx, Envelope[*telemetryv1.Alarm]{Msg: d.Alarm, Ack: ack})
+		case d.RainGauge != nil:
+			aerr = rain.Add(hctx, Envelope[*telemetryv1.RainGaugeReading]{Msg: d.RainGauge, Ack: ack})
 		default:
 			m.Drops.WithLabelValues("empty_decode").Inc()
 			_ = ack()

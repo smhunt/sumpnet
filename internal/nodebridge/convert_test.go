@@ -62,6 +62,20 @@ func TestDecodeEnvelope(t *testing.T) {
 	}
 }
 
+func TestDecodeRainGaugeEnvelope(t *testing.T) {
+	ts := int64(1776222727)
+	body := envelope(t, &codec.RainGauge{TipCount: 3, MMPerTipUM: 254, IntervalS: 900, BattMV: 3312, Flags: codec.RainCounterReset}, 7, &ts, nil)
+	d, err := Decode(Topic(dev), body, now())
+	if err != nil || d.RainGauge == nil || d.TimeFallback {
+		t.Fatalf("decoded = %+v, %v", d, err)
+	}
+	r := d.RainGauge
+	if r.GetTipCount() != 3 || r.GetMmPerTip() != 0.254 || r.GetIntervalS() != 900 || !r.GetCounterReset() ||
+		r.GetMeta().GetDeduplicationId() != DedupID(dev, 7, codec.PortRainGauge) || !r.GetTs().AsTime().Equal(time.Unix(ts, 0)) {
+		t.Errorf("rain gauge = %v", r)
+	}
+}
+
 func TestDecodeWithoutTimeUsesNow(t *testing.T) {
 	body := envelope(t, &codec.Heartbeat{LevelMM: 1234, TempCentiC: 2157, RHPct: 55, BattMV: 3987, CyclesSinceLast: 3, Flags: codec.FlagMainsOK | codec.FlagBackupRan}, 1, nil, nil)
 	d, err := Decode(Topic(dev), body, now())

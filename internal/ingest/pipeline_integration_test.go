@@ -53,8 +53,8 @@ func TestPipelineStorm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stats) != 10 {
-		t.Fatalf("%d devices stored, want 10", len(stats))
+	if len(stats) != 10+testpipeline.SimRainGauges {
+		t.Fatalf("%d devices stored, want 10 house nodes + %d rain gauges", len(stats), testpipeline.SimRainGauges)
 	}
 	for _, s := range stats {
 		if s.Rows != s.MaxFCnt+1 {
@@ -114,7 +114,7 @@ func TestPipelineStorm(t *testing.T) {
 	testpipeline.StartBridge(t, "mqtt-bridge-test", broker, nodebridge.TopicFilter, ingestAddr, nodebridge.Decode)
 	pub := publisher(t, broker)
 	for _, ev := range events {
-		dev := strings.Replace(ev.DevEUI, "70b3d57ed0", "70b3d57ee0", 1)
+		dev := strings.Replace(ev.DevEUI, "70b3d57ed", "70b3d57ee", 1) // house nodes and rain gauges alike
 		ts := ev.Time.Unix()
 		rssi := int32(-60)
 		body, merr := json.Marshal(nodebridge.Envelope{FCnt: ev.FCnt, FPort: ev.FPort, Data: ev.Payload, T: &ts, RSSI: &rssi})
@@ -125,14 +125,14 @@ func TestPipelineStorm(t *testing.T) {
 			t.Fatal(perr)
 		}
 	}
-	doubled := testpipeline.Counts{Readings: 2 * want.Readings, Cycles: 2 * want.Cycles, Summaries: 2 * want.Summaries, Alarms: 2 * want.Alarms, SummarisedCycles: 2 * want.SummarisedCycles}
+	doubled := testpipeline.Counts{Readings: 2 * want.Readings, Cycles: 2 * want.Cycles, Summaries: 2 * want.Summaries, Alarms: 2 * want.Alarms, SummarisedCycles: 2 * want.SummarisedCycles, RainGauges: 2 * want.RainGauges}
 	testpipeline.WaitForCounts(t, q, doubled, 90*time.Second)
 	stats, err = q.FCntStatsByDevice(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(stats) != 20 {
-		t.Fatalf("%d devices after the Wi-Fi leg, want 20", len(stats))
+	if len(stats) != 2*(10+testpipeline.SimRainGauges) {
+		t.Fatalf("%d devices after the Wi-Fi leg, want %d", len(stats), 2*(10+testpipeline.SimRainGauges))
 	}
 	for _, s := range stats {
 		if s.Rows != s.MaxFCnt+1 {

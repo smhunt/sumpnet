@@ -32,6 +32,17 @@ func (q *Queries) CountCycleEvents(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countRainGaugeUplinks = `-- name: CountRainGaugeUplinks :one
+SELECT count(*) FROM rain_gauge_uplinks
+`
+
+func (q *Queries) CountRainGaugeUplinks(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countRainGaugeUplinks)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countReadings = `-- name: CountReadings :one
 SELECT count(*) FROM readings
 `
@@ -61,6 +72,7 @@ FROM (
   UNION ALL SELECT device_id, f_cnt FROM cycle_events
   UNION ALL SELECT device_id, f_cnt FROM storm_summaries
   UNION ALL SELECT device_id, f_cnt FROM alarm_events
+  UNION ALL SELECT device_id, f_cnt FROM rain_gauge_uplinks
 ) u
 GROUP BY device_id
 ORDER BY device_id

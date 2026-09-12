@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1;telemetryv1";
 
 // IngestService receives decoded uplinks from the bridges (lora-bridge for
-// ChirpStack, mqtt-bridge for the legacy Photon node). Messages carry SI units
+// ChirpStack, mqtt-bridge for Wi-Fi nodes). Messages carry SI units
 // and enums; the byte-level wire encoding lives in internal/codec and the
 // bridge converts between the two. Internal only: no HTTP bindings.
 service IngestService {
@@ -16,6 +16,9 @@ service IngestService {
   // cycle aggregates the node rolled up in storm mode.
   rpc SubmitCycleEvents(stream SubmitCycleEventsRequest) returns (SubmitCycleEventsResponse);
   rpc SubmitAlarms(stream SubmitAlarmsRequest) returns (SubmitAlarmsResponse);
+  // Rain gauge uplinks (fPort 5), stored raw; the weather service derives
+  // rainfall from consecutive tip counters.
+  rpc SubmitRainGaugeReadings(stream SubmitRainGaugeReadingsRequest) returns (SubmitRainGaugeReadingsResponse);
 }
 
 // UplinkMeta identifies the LoRaWAN frame a message was decoded from.
@@ -103,6 +106,23 @@ message StormSummary {
   uint32 min_level_mm = 7;
 }
 
+// RainGaugeReading is one tipping-bucket report (fPort 5, device kind rain).
+message RainGaugeReading {
+  UplinkMeta meta = 1;
+  // Event time of the uplink: the end of the interval it reports.
+  google.protobuf.Timestamp ts = 2;
+  // Tips since the node booted.
+  uint32 tip_count = 3;
+  // Rain per tip in millimetres (0.2 for the pilot gauges).
+  double mm_per_tip = 4;
+  // Seconds since the node's previous uplink (since boot after a reset).
+  uint32 interval_s = 5;
+  uint32 batt_mv = 6;
+  // The node rebooted since its previous uplink, so tip_count restarted.
+  bool counter_reset = 7;
+  bool sensor_fault = 8;
+}
+
 message SubmitReadingsRequest {
   repeated Reading readings = 1;
 }
@@ -127,6 +147,15 @@ message SubmitAlarmsRequest {
 }
 
 message SubmitAlarmsResponse {
+  uint32 accepted = 1;
+  uint32 duplicates = 2;
+}
+
+message SubmitRainGaugeReadingsRequest {
+  repeated RainGaugeReading rain_gauge_readings = 1;
+}
+
+message SubmitRainGaugeReadingsResponse {
   uint32 accepted = 1;
   uint32 duplicates = 2;
 }

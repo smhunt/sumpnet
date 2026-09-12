@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	telemetryv1 "github.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1"
@@ -59,6 +60,9 @@ func (f *fakeStore) InsertStormSummaries(context.Context, []store.StormSummary) 
 	return store.Result{}, nil
 }
 func (f *fakeStore) InsertAlarmEvents(context.Context, []store.AlarmEvent) (store.Result, error) {
+	return store.Result{}, nil
+}
+func (f *fakeStore) InsertRainGaugeUplinks(context.Context, []store.RainGaugeUplink) (store.Result, error) {
 	return store.Result{}, nil
 }
 
@@ -249,4 +253,34 @@ func counterValue(t *testing.T, vec *prometheus.CounterVec, labels ...string) fl
 		t.Fatal(err)
 	}
 	return m.GetCounter().GetValue()
+}
+
+func TestRainGaugeRow(t *testing.T) {
+	s := newServer(&fakeStore{}, Config{BatchMax: 10, BatchDelay: time.Hour, QueueBatches: 1, MaxFuture: time.Hour})
+	ts := timestamppb.New(time.Date(2026, 4, 15, 5, 55, 0, 0, time.UTC))
+	good := &telemetryv1.RainGaugeReading{
+		Meta: &telemetryv1.UplinkMeta{DevEui: "70B3D57ED1000001", FCnt: 12, ReceivedAt: ts, GatewayId: "gw", RssiDbm: -80},
+		Ts:   ts, TipCount: 250, MmPerTip: 0.2, IntervalS: 300, BattMv: 3600, CounterReset: true,
+	}
+	row, why := s.rainGaugeRow(good)
+	if why != "" || row.DeviceID != "70b3d57ed1000001" || row.FCnt != 12 || row.TipCount != 250 || row.MMPerTip != 0.2 ||
+		row.IntervalS != 300 || row.BattMV != 3600 || !row.CounterReset || row.SensorFault || !row.TS.Equal(ts.AsTime()) || *row.RSSIDBm != -80 {
+		t.Fatalf("row = %+v, %q", row, why)
+	}
+	for name, mutate := range map[string]func(*telemetryv1.RainGaugeReading){
+		"zero mm per tip": func(r *telemetryv1.RainGaugeReading) { r.MmPerTip = 0 },
+		"huge mm per tip": func(r *telemetryv1.RainGaugeReading) { r.MmPerTip = 1000 },
+		"future": func(r *telemetryv1.RainGaugeReading) {
+			r.Ts = timestamppb.New(time.Date(2026, 4, 15, 8, 0, 0, 0, time.UTC))
+		},
+	} {
+		bad := proto.Clone(good).(*telemetryv1.RainGaugeReading)
+		mutate(bad)
+		if _, why := s.rainGaugeRow(bad); why == "" {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, why := s.rainGaugeRow(&telemetryv1.RainGaugeReading{MmPerTip: 0.2}); why != rejNoMeta {
+		t.Errorf("no meta: %q", why)
+	}
 }

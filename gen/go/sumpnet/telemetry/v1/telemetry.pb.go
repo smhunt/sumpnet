@@ -663,6 +663,112 @@ func (x *StormSummary) GetMinLevelMm() uint32 {
 	return 0
 }
 
+// RainGaugeReading is one tipping-bucket report (fPort 5, device kind rain).
+type RainGaugeReading struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Meta  *UplinkMeta            `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	// Event time of the uplink: the end of the interval it reports.
+	Ts *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=ts,proto3" json:"ts,omitempty"`
+	// Tips since the node booted.
+	TipCount uint32 `protobuf:"varint,3,opt,name=tip_count,json=tipCount,proto3" json:"tip_count,omitempty"`
+	// Rain per tip in millimetres (0.2 for the pilot gauges).
+	MmPerTip float64 `protobuf:"fixed64,4,opt,name=mm_per_tip,json=mmPerTip,proto3" json:"mm_per_tip,omitempty"`
+	// Seconds since the node's previous uplink (since boot after a reset).
+	IntervalS uint32 `protobuf:"varint,5,opt,name=interval_s,json=intervalS,proto3" json:"interval_s,omitempty"`
+	BattMv    uint32 `protobuf:"varint,6,opt,name=batt_mv,json=battMv,proto3" json:"batt_mv,omitempty"`
+	// The node rebooted since its previous uplink, so tip_count restarted.
+	CounterReset  bool `protobuf:"varint,7,opt,name=counter_reset,json=counterReset,proto3" json:"counter_reset,omitempty"`
+	SensorFault   bool `protobuf:"varint,8,opt,name=sensor_fault,json=sensorFault,proto3" json:"sensor_fault,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RainGaugeReading) Reset() {
+	*x = RainGaugeReading{}
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RainGaugeReading) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RainGaugeReading) ProtoMessage() {}
+
+func (x *RainGaugeReading) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RainGaugeReading.ProtoReflect.Descriptor instead.
+func (*RainGaugeReading) Descriptor() ([]byte, []int) {
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RainGaugeReading) GetMeta() *UplinkMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *RainGaugeReading) GetTs() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Ts
+	}
+	return nil
+}
+
+func (x *RainGaugeReading) GetTipCount() uint32 {
+	if x != nil {
+		return x.TipCount
+	}
+	return 0
+}
+
+func (x *RainGaugeReading) GetMmPerTip() float64 {
+	if x != nil {
+		return x.MmPerTip
+	}
+	return 0
+}
+
+func (x *RainGaugeReading) GetIntervalS() uint32 {
+	if x != nil {
+		return x.IntervalS
+	}
+	return 0
+}
+
+func (x *RainGaugeReading) GetBattMv() uint32 {
+	if x != nil {
+		return x.BattMv
+	}
+	return 0
+}
+
+func (x *RainGaugeReading) GetCounterReset() bool {
+	if x != nil {
+		return x.CounterReset
+	}
+	return false
+}
+
+func (x *RainGaugeReading) GetSensorFault() bool {
+	if x != nil {
+		return x.SensorFault
+	}
+	return false
+}
+
 type SubmitReadingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Readings      []*Reading             `protobuf:"bytes,1,rep,name=readings,proto3" json:"readings,omitempty"`
@@ -672,7 +778,7 @@ type SubmitReadingsRequest struct {
 
 func (x *SubmitReadingsRequest) Reset() {
 	*x = SubmitReadingsRequest{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[6]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +790,7 @@ func (x *SubmitReadingsRequest) String() string {
 func (*SubmitReadingsRequest) ProtoMessage() {}
 
 func (x *SubmitReadingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[6]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -697,7 +803,7 @@ func (x *SubmitReadingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitReadingsRequest.ProtoReflect.Descriptor instead.
 func (*SubmitReadingsRequest) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{6}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SubmitReadingsRequest) GetReadings() []*Reading {
@@ -717,7 +823,7 @@ type SubmitReadingsResponse struct {
 
 func (x *SubmitReadingsResponse) Reset() {
 	*x = SubmitReadingsResponse{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[7]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -729,7 +835,7 @@ func (x *SubmitReadingsResponse) String() string {
 func (*SubmitReadingsResponse) ProtoMessage() {}
 
 func (x *SubmitReadingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[7]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -742,7 +848,7 @@ func (x *SubmitReadingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitReadingsResponse.ProtoReflect.Descriptor instead.
 func (*SubmitReadingsResponse) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{7}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SubmitReadingsResponse) GetAccepted() uint32 {
@@ -769,7 +875,7 @@ type SubmitCycleEventsRequest struct {
 
 func (x *SubmitCycleEventsRequest) Reset() {
 	*x = SubmitCycleEventsRequest{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[8]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -781,7 +887,7 @@ func (x *SubmitCycleEventsRequest) String() string {
 func (*SubmitCycleEventsRequest) ProtoMessage() {}
 
 func (x *SubmitCycleEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[8]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -794,7 +900,7 @@ func (x *SubmitCycleEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitCycleEventsRequest.ProtoReflect.Descriptor instead.
 func (*SubmitCycleEventsRequest) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{8}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SubmitCycleEventsRequest) GetCycleEvents() []*CycleEvent {
@@ -821,7 +927,7 @@ type SubmitCycleEventsResponse struct {
 
 func (x *SubmitCycleEventsResponse) Reset() {
 	*x = SubmitCycleEventsResponse{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[9]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +939,7 @@ func (x *SubmitCycleEventsResponse) String() string {
 func (*SubmitCycleEventsResponse) ProtoMessage() {}
 
 func (x *SubmitCycleEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[9]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +952,7 @@ func (x *SubmitCycleEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitCycleEventsResponse.ProtoReflect.Descriptor instead.
 func (*SubmitCycleEventsResponse) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{9}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SubmitCycleEventsResponse) GetAccepted() uint32 {
@@ -872,7 +978,7 @@ type SubmitAlarmsRequest struct {
 
 func (x *SubmitAlarmsRequest) Reset() {
 	*x = SubmitAlarmsRequest{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[10]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -884,7 +990,7 @@ func (x *SubmitAlarmsRequest) String() string {
 func (*SubmitAlarmsRequest) ProtoMessage() {}
 
 func (x *SubmitAlarmsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[10]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -897,7 +1003,7 @@ func (x *SubmitAlarmsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitAlarmsRequest.ProtoReflect.Descriptor instead.
 func (*SubmitAlarmsRequest) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{10}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SubmitAlarmsRequest) GetAlarms() []*Alarm {
@@ -917,7 +1023,7 @@ type SubmitAlarmsResponse struct {
 
 func (x *SubmitAlarmsResponse) Reset() {
 	*x = SubmitAlarmsResponse{}
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[11]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -929,7 +1035,7 @@ func (x *SubmitAlarmsResponse) String() string {
 func (*SubmitAlarmsResponse) ProtoMessage() {}
 
 func (x *SubmitAlarmsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[11]
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -942,7 +1048,7 @@ func (x *SubmitAlarmsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitAlarmsResponse.ProtoReflect.Descriptor instead.
 func (*SubmitAlarmsResponse) Descriptor() ([]byte, []int) {
-	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{11}
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SubmitAlarmsResponse) GetAccepted() uint32 {
@@ -953,6 +1059,102 @@ func (x *SubmitAlarmsResponse) GetAccepted() uint32 {
 }
 
 func (x *SubmitAlarmsResponse) GetDuplicates() uint32 {
+	if x != nil {
+		return x.Duplicates
+	}
+	return 0
+}
+
+type SubmitRainGaugeReadingsRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	RainGaugeReadings []*RainGaugeReading    `protobuf:"bytes,1,rep,name=rain_gauge_readings,json=rainGaugeReadings,proto3" json:"rain_gauge_readings,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *SubmitRainGaugeReadingsRequest) Reset() {
+	*x = SubmitRainGaugeReadingsRequest{}
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRainGaugeReadingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRainGaugeReadingsRequest) ProtoMessage() {}
+
+func (x *SubmitRainGaugeReadingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRainGaugeReadingsRequest.ProtoReflect.Descriptor instead.
+func (*SubmitRainGaugeReadingsRequest) Descriptor() ([]byte, []int) {
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SubmitRainGaugeReadingsRequest) GetRainGaugeReadings() []*RainGaugeReading {
+	if x != nil {
+		return x.RainGaugeReadings
+	}
+	return nil
+}
+
+type SubmitRainGaugeReadingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      uint32                 `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Duplicates    uint32                 `protobuf:"varint,2,opt,name=duplicates,proto3" json:"duplicates,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitRainGaugeReadingsResponse) Reset() {
+	*x = SubmitRainGaugeReadingsResponse{}
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRainGaugeReadingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRainGaugeReadingsResponse) ProtoMessage() {}
+
+func (x *SubmitRainGaugeReadingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_telemetry_v1_telemetry_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRainGaugeReadingsResponse.ProtoReflect.Descriptor instead.
+func (*SubmitRainGaugeReadingsResponse) Descriptor() ([]byte, []int) {
+	return file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SubmitRainGaugeReadingsResponse) GetAccepted() uint32 {
+	if x != nil {
+		return x.Accepted
+	}
+	return 0
+}
+
+func (x *SubmitRainGaugeReadingsResponse) GetDuplicates() uint32 {
 	if x != nil {
 		return x.Duplicates
 	}
@@ -1017,7 +1219,18 @@ const file_sumpnet_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\vtotal_run_s\x18\x05 \x01(\rR\ttotalRunS\x12+\n" +
 	"\x12max_peak_current_a\x18\x06 \x01(\x01R\x0fmaxPeakCurrentA\x12 \n" +
 	"\fmin_level_mm\x18\a \x01(\rR\n" +
-	"minLevelMm\"R\n" +
+	"minLevelMm\"\xaf\x02\n" +
+	"\x10RainGaugeReading\x124\n" +
+	"\x04meta\x18\x01 \x01(\v2 .sumpnet.telemetry.v1.UplinkMetaR\x04meta\x12*\n" +
+	"\x02ts\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02ts\x12\x1b\n" +
+	"\ttip_count\x18\x03 \x01(\rR\btipCount\x12\x1c\n" +
+	"\n" +
+	"mm_per_tip\x18\x04 \x01(\x01R\bmmPerTip\x12\x1d\n" +
+	"\n" +
+	"interval_s\x18\x05 \x01(\rR\tintervalS\x12\x17\n" +
+	"\abatt_mv\x18\x06 \x01(\rR\x06battMv\x12#\n" +
+	"\rcounter_reset\x18\a \x01(\bR\fcounterReset\x12!\n" +
+	"\fsensor_fault\x18\b \x01(\bR\vsensorFault\"R\n" +
 	"\x15SubmitReadingsRequest\x129\n" +
 	"\breadings\x18\x01 \x03(\v2\x1d.sumpnet.telemetry.v1.ReadingR\breadings\"T\n" +
 	"\x16SubmitReadingsResponse\x12\x1a\n" +
@@ -1039,6 +1252,13 @@ const file_sumpnet_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\baccepted\x18\x01 \x01(\rR\baccepted\x12\x1e\n" +
 	"\n" +
 	"duplicates\x18\x02 \x01(\rR\n" +
+	"duplicates\"x\n" +
+	"\x1eSubmitRainGaugeReadingsRequest\x12V\n" +
+	"\x13rain_gauge_readings\x18\x01 \x03(\v2&.sumpnet.telemetry.v1.RainGaugeReadingR\x11rainGaugeReadings\"]\n" +
+	"\x1fSubmitRainGaugeReadingsResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\rR\baccepted\x12\x1e\n" +
+	"\n" +
+	"duplicates\x18\x02 \x01(\rR\n" +
 	"duplicates*J\n" +
 	"\x06PumpId\x12\x17\n" +
 	"\x13PUMP_ID_UNSPECIFIED\x10\x00\x12\x13\n" +
@@ -1050,11 +1270,12 @@ const file_sumpnet_telemetry_v1_telemetry_proto_rawDesc = "" +
 	"\x15ALARM_CODE_MAINS_LOST\x10\x02\x12\x16\n" +
 	"\x12ALARM_CODE_DRY_RUN\x10\x03\x12\x1d\n" +
 	"\x19ALARM_CODE_CONTINUOUS_RUN\x10\x04\x12\x1b\n" +
-	"\x17ALARM_CODE_SENSOR_FAULT\x10\x052\xdf\x02\n" +
+	"\x17ALARM_CODE_SENSOR_FAULT\x10\x052\xea\x03\n" +
 	"\rIngestService\x12m\n" +
 	"\x0eSubmitReadings\x12+.sumpnet.telemetry.v1.SubmitReadingsRequest\x1a,.sumpnet.telemetry.v1.SubmitReadingsResponse(\x01\x12v\n" +
 	"\x11SubmitCycleEvents\x12..sumpnet.telemetry.v1.SubmitCycleEventsRequest\x1a/.sumpnet.telemetry.v1.SubmitCycleEventsResponse(\x01\x12g\n" +
-	"\fSubmitAlarms\x12).sumpnet.telemetry.v1.SubmitAlarmsRequest\x1a*.sumpnet.telemetry.v1.SubmitAlarmsResponse(\x01BCZAgithub.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1;telemetryv1b\x06proto3"
+	"\fSubmitAlarms\x12).sumpnet.telemetry.v1.SubmitAlarmsRequest\x1a*.sumpnet.telemetry.v1.SubmitAlarmsResponse(\x01\x12\x88\x01\n" +
+	"\x17SubmitRainGaugeReadings\x124.sumpnet.telemetry.v1.SubmitRainGaugeReadingsRequest\x1a5.sumpnet.telemetry.v1.SubmitRainGaugeReadingsResponse(\x01BCZAgithub.com/smhunt/sumpnet/gen/go/sumpnet/telemetry/v1;telemetryv1b\x06proto3"
 
 var (
 	file_sumpnet_telemetry_v1_telemetry_proto_rawDescOnce sync.Once
@@ -1069,52 +1290,60 @@ func file_sumpnet_telemetry_v1_telemetry_proto_rawDescGZIP() []byte {
 }
 
 var file_sumpnet_telemetry_v1_telemetry_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sumpnet_telemetry_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_sumpnet_telemetry_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_sumpnet_telemetry_v1_telemetry_proto_goTypes = []any{
-	(PumpId)(0),                       // 0: sumpnet.telemetry.v1.PumpId
-	(AlarmCode)(0),                    // 1: sumpnet.telemetry.v1.AlarmCode
-	(*UplinkMeta)(nil),                // 2: sumpnet.telemetry.v1.UplinkMeta
-	(*ReadingFlags)(nil),              // 3: sumpnet.telemetry.v1.ReadingFlags
-	(*Reading)(nil),                   // 4: sumpnet.telemetry.v1.Reading
-	(*CycleEvent)(nil),                // 5: sumpnet.telemetry.v1.CycleEvent
-	(*Alarm)(nil),                     // 6: sumpnet.telemetry.v1.Alarm
-	(*StormSummary)(nil),              // 7: sumpnet.telemetry.v1.StormSummary
-	(*SubmitReadingsRequest)(nil),     // 8: sumpnet.telemetry.v1.SubmitReadingsRequest
-	(*SubmitReadingsResponse)(nil),    // 9: sumpnet.telemetry.v1.SubmitReadingsResponse
-	(*SubmitCycleEventsRequest)(nil),  // 10: sumpnet.telemetry.v1.SubmitCycleEventsRequest
-	(*SubmitCycleEventsResponse)(nil), // 11: sumpnet.telemetry.v1.SubmitCycleEventsResponse
-	(*SubmitAlarmsRequest)(nil),       // 12: sumpnet.telemetry.v1.SubmitAlarmsRequest
-	(*SubmitAlarmsResponse)(nil),      // 13: sumpnet.telemetry.v1.SubmitAlarmsResponse
-	(*timestamppb.Timestamp)(nil),     // 14: google.protobuf.Timestamp
+	(PumpId)(0),                             // 0: sumpnet.telemetry.v1.PumpId
+	(AlarmCode)(0),                          // 1: sumpnet.telemetry.v1.AlarmCode
+	(*UplinkMeta)(nil),                      // 2: sumpnet.telemetry.v1.UplinkMeta
+	(*ReadingFlags)(nil),                    // 3: sumpnet.telemetry.v1.ReadingFlags
+	(*Reading)(nil),                         // 4: sumpnet.telemetry.v1.Reading
+	(*CycleEvent)(nil),                      // 5: sumpnet.telemetry.v1.CycleEvent
+	(*Alarm)(nil),                           // 6: sumpnet.telemetry.v1.Alarm
+	(*StormSummary)(nil),                    // 7: sumpnet.telemetry.v1.StormSummary
+	(*RainGaugeReading)(nil),                // 8: sumpnet.telemetry.v1.RainGaugeReading
+	(*SubmitReadingsRequest)(nil),           // 9: sumpnet.telemetry.v1.SubmitReadingsRequest
+	(*SubmitReadingsResponse)(nil),          // 10: sumpnet.telemetry.v1.SubmitReadingsResponse
+	(*SubmitCycleEventsRequest)(nil),        // 11: sumpnet.telemetry.v1.SubmitCycleEventsRequest
+	(*SubmitCycleEventsResponse)(nil),       // 12: sumpnet.telemetry.v1.SubmitCycleEventsResponse
+	(*SubmitAlarmsRequest)(nil),             // 13: sumpnet.telemetry.v1.SubmitAlarmsRequest
+	(*SubmitAlarmsResponse)(nil),            // 14: sumpnet.telemetry.v1.SubmitAlarmsResponse
+	(*SubmitRainGaugeReadingsRequest)(nil),  // 15: sumpnet.telemetry.v1.SubmitRainGaugeReadingsRequest
+	(*SubmitRainGaugeReadingsResponse)(nil), // 16: sumpnet.telemetry.v1.SubmitRainGaugeReadingsResponse
+	(*timestamppb.Timestamp)(nil),           // 17: google.protobuf.Timestamp
 }
 var file_sumpnet_telemetry_v1_telemetry_proto_depIdxs = []int32{
-	14, // 0: sumpnet.telemetry.v1.UplinkMeta.received_at:type_name -> google.protobuf.Timestamp
+	17, // 0: sumpnet.telemetry.v1.UplinkMeta.received_at:type_name -> google.protobuf.Timestamp
 	2,  // 1: sumpnet.telemetry.v1.Reading.meta:type_name -> sumpnet.telemetry.v1.UplinkMeta
-	14, // 2: sumpnet.telemetry.v1.Reading.ts:type_name -> google.protobuf.Timestamp
+	17, // 2: sumpnet.telemetry.v1.Reading.ts:type_name -> google.protobuf.Timestamp
 	3,  // 3: sumpnet.telemetry.v1.Reading.flags:type_name -> sumpnet.telemetry.v1.ReadingFlags
 	2,  // 4: sumpnet.telemetry.v1.CycleEvent.meta:type_name -> sumpnet.telemetry.v1.UplinkMeta
-	14, // 5: sumpnet.telemetry.v1.CycleEvent.started_at:type_name -> google.protobuf.Timestamp
+	17, // 5: sumpnet.telemetry.v1.CycleEvent.started_at:type_name -> google.protobuf.Timestamp
 	0,  // 6: sumpnet.telemetry.v1.CycleEvent.pump_id:type_name -> sumpnet.telemetry.v1.PumpId
 	2,  // 7: sumpnet.telemetry.v1.Alarm.meta:type_name -> sumpnet.telemetry.v1.UplinkMeta
-	14, // 8: sumpnet.telemetry.v1.Alarm.raised_at:type_name -> google.protobuf.Timestamp
+	17, // 8: sumpnet.telemetry.v1.Alarm.raised_at:type_name -> google.protobuf.Timestamp
 	1,  // 9: sumpnet.telemetry.v1.Alarm.code:type_name -> sumpnet.telemetry.v1.AlarmCode
 	2,  // 10: sumpnet.telemetry.v1.StormSummary.meta:type_name -> sumpnet.telemetry.v1.UplinkMeta
-	14, // 11: sumpnet.telemetry.v1.StormSummary.window_end:type_name -> google.protobuf.Timestamp
-	4,  // 12: sumpnet.telemetry.v1.SubmitReadingsRequest.readings:type_name -> sumpnet.telemetry.v1.Reading
-	5,  // 13: sumpnet.telemetry.v1.SubmitCycleEventsRequest.cycle_events:type_name -> sumpnet.telemetry.v1.CycleEvent
-	7,  // 14: sumpnet.telemetry.v1.SubmitCycleEventsRequest.storm_summaries:type_name -> sumpnet.telemetry.v1.StormSummary
-	6,  // 15: sumpnet.telemetry.v1.SubmitAlarmsRequest.alarms:type_name -> sumpnet.telemetry.v1.Alarm
-	8,  // 16: sumpnet.telemetry.v1.IngestService.SubmitReadings:input_type -> sumpnet.telemetry.v1.SubmitReadingsRequest
-	10, // 17: sumpnet.telemetry.v1.IngestService.SubmitCycleEvents:input_type -> sumpnet.telemetry.v1.SubmitCycleEventsRequest
-	12, // 18: sumpnet.telemetry.v1.IngestService.SubmitAlarms:input_type -> sumpnet.telemetry.v1.SubmitAlarmsRequest
-	9,  // 19: sumpnet.telemetry.v1.IngestService.SubmitReadings:output_type -> sumpnet.telemetry.v1.SubmitReadingsResponse
-	11, // 20: sumpnet.telemetry.v1.IngestService.SubmitCycleEvents:output_type -> sumpnet.telemetry.v1.SubmitCycleEventsResponse
-	13, // 21: sumpnet.telemetry.v1.IngestService.SubmitAlarms:output_type -> sumpnet.telemetry.v1.SubmitAlarmsResponse
-	19, // [19:22] is the sub-list for method output_type
-	16, // [16:19] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	17, // 11: sumpnet.telemetry.v1.StormSummary.window_end:type_name -> google.protobuf.Timestamp
+	2,  // 12: sumpnet.telemetry.v1.RainGaugeReading.meta:type_name -> sumpnet.telemetry.v1.UplinkMeta
+	17, // 13: sumpnet.telemetry.v1.RainGaugeReading.ts:type_name -> google.protobuf.Timestamp
+	4,  // 14: sumpnet.telemetry.v1.SubmitReadingsRequest.readings:type_name -> sumpnet.telemetry.v1.Reading
+	5,  // 15: sumpnet.telemetry.v1.SubmitCycleEventsRequest.cycle_events:type_name -> sumpnet.telemetry.v1.CycleEvent
+	7,  // 16: sumpnet.telemetry.v1.SubmitCycleEventsRequest.storm_summaries:type_name -> sumpnet.telemetry.v1.StormSummary
+	6,  // 17: sumpnet.telemetry.v1.SubmitAlarmsRequest.alarms:type_name -> sumpnet.telemetry.v1.Alarm
+	8,  // 18: sumpnet.telemetry.v1.SubmitRainGaugeReadingsRequest.rain_gauge_readings:type_name -> sumpnet.telemetry.v1.RainGaugeReading
+	9,  // 19: sumpnet.telemetry.v1.IngestService.SubmitReadings:input_type -> sumpnet.telemetry.v1.SubmitReadingsRequest
+	11, // 20: sumpnet.telemetry.v1.IngestService.SubmitCycleEvents:input_type -> sumpnet.telemetry.v1.SubmitCycleEventsRequest
+	13, // 21: sumpnet.telemetry.v1.IngestService.SubmitAlarms:input_type -> sumpnet.telemetry.v1.SubmitAlarmsRequest
+	15, // 22: sumpnet.telemetry.v1.IngestService.SubmitRainGaugeReadings:input_type -> sumpnet.telemetry.v1.SubmitRainGaugeReadingsRequest
+	10, // 23: sumpnet.telemetry.v1.IngestService.SubmitReadings:output_type -> sumpnet.telemetry.v1.SubmitReadingsResponse
+	12, // 24: sumpnet.telemetry.v1.IngestService.SubmitCycleEvents:output_type -> sumpnet.telemetry.v1.SubmitCycleEventsResponse
+	14, // 25: sumpnet.telemetry.v1.IngestService.SubmitAlarms:output_type -> sumpnet.telemetry.v1.SubmitAlarmsResponse
+	16, // 26: sumpnet.telemetry.v1.IngestService.SubmitRainGaugeReadings:output_type -> sumpnet.telemetry.v1.SubmitRainGaugeReadingsResponse
+	23, // [23:27] is the sub-list for method output_type
+	19, // [19:23] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_sumpnet_telemetry_v1_telemetry_proto_init() }
@@ -1128,7 +1357,7 @@ func file_sumpnet_telemetry_v1_telemetry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sumpnet_telemetry_v1_telemetry_proto_rawDesc), len(file_sumpnet_telemetry_v1_telemetry_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
