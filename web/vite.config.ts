@@ -21,6 +21,11 @@ export default defineConfig(({ mode }) => {
   const proxy = { '/v1': { target: apiTarget, changeOrigin: true, secure: false } }
   return {
     plugins: [react()],
+    // maplibre-gl 6 loads its worker from a sibling file (new URL(..., import.meta.url));
+    // pre-bundling moves the module into .vite/deps without that file. MapView also sets
+    // the worker URL explicitly (a Vite-bundled module worker) so production builds work.
+    optimizeDeps: { exclude: ['maplibre-gl'] },
+    worker: { format: 'es' },
     server: {
       port: 3034, // registered in ~/.claude/PORTS.md (sumpnet web dashboard)
       strictPort: true,

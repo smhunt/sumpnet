@@ -1,5 +1,7 @@
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { AttributionControl, Map as MapLibre, NavigationControl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl'
+import { AttributionControl, Map as MapLibre, NavigationControl, setWorkerUrl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl'
+// The worker imports a shared chunk, so let Vite bundle it into one module worker.
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { boundsOf, segmentFeatures } from '../lib/mapdata'
 import type { Segment } from '../lib/types'
@@ -10,10 +12,30 @@ const TILE_ATTRIBUTION =
 // Nominal centre of the illustrative Timberwalk outlines (Ilderton, ON).
 const TIMBERWALK: [number, number] = [-81.4236, 43.056]
 
+setWorkerUrl(workerUrl)
+
+const HATCH = 'privacy-hatch'
+const HIT_LAYERS = ['segment-fill', 'segment-hidden'] as const
+
+// The segments source and layers are part of the initial style, so nothing
+// waits on the map's load event (which needs every base tile first).
 const style: StyleSpecification = {
   version: 8,
-  sources: { base: { type: 'raster', tiles: [TILE_URL], tileSize: 256, maxzoom: 19, attribution: TILE_ATTRIBUTION } },
-  layers: [{ id: 'base', type: 'raster', source: 'base', paint: { 'raster-saturation': -0.7, 'raster-opacity': 0.9 } }],
+  sources: {
+    base: { type: 'raster', tiles: [TILE_URL], tileSize: 256, maxzoom: 19, attribution: TILE_ATTRIBUTION },
+    segments: { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+  },
+  layers: [
+    { id: 'base', type: 'raster', source: 'base', paint: { 'raster-saturation': -0.7, 'raster-opacity': 0.9 } },
+    { id: 'segment-fill', type: 'fill', source: 'segments', filter: ['!', ['get', 'hidden']], paint: { 'fill-color': ['get', 'fill'], 'fill-opacity': 0.8 } },
+    { id: 'segment-hidden', type: 'fill', source: 'segments', filter: ['get', 'hidden'], paint: { 'fill-pattern': HATCH } },
+    {
+      id: 'segment-line',
+      type: 'line',
+      source: 'segments',
+      paint: { 'line-color': ['case', ['get', 'selected'], '#1F2A33', '#52606B'], 'line-width': ['case', ['get', 'selected'], 3, 1] },
+    },
+  ],
 }
 
 // hatch is the privacy texture: graphite diagonals on transparency.
@@ -53,27 +75,22 @@ export function MapView({ segments, fillFor, selectedId, onSelect }: Props) {
     const m = new MapLibre({ container: container.current, style, center: TIMBERWALK, zoom: 15, attributionControl: false })
     m.addControl(new NavigationControl({ showCompass: false }), 'top-left')
     m.addControl(new AttributionControl({ compact: true }), 'bottom-right')
-    m.on('load', () => {
-      m.addImage('privacy-hatch', hatch())
-      m.addSource('segments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
-      m.addLayer({ id: 'segment-fill', type: 'fill', source: 'segments', filter: ['!', ['get', 'hidden']], paint: { 'fill-color': ['get', 'fill'], 'fill-opacity': 0.8 } })
-      m.addLayer({ id: 'segment-hidden', type: 'fill', source: 'segments', filter: ['get', 'hidden'], paint: { 'fill-pattern': 'privacy-hatch' } })
-      m.addLayer({
-        id: 'segment-line',
-        type: 'line',
-        source: 'segments',
-        paint: { 'line-color': ['case', ['get', 'selected'], '#1F2A33', '#52606B'], 'line-width': ['case', ['get', 'selected'], 3, 1] },
-      })
-      m.on('click', (e) => {
-        const hit = m.queryRenderedFeatures(e.point, { layers: ['segment-fill', 'segment-hidden'] })[0]
-        onSelectRef.current((hit?.properties?.id as string | undefined) ?? null)
-      })
-      for (const layer of ['segment-fill', 'segment-hidden']) {
-        m.on('mouseenter', layer, () => (m.getCanvas().style.cursor = 'pointer'))
-        m.on('mouseleave', layer, () => (m.getCanvas().style.cursor = ''))
-      }
-      setReady(true)
+    // Generated pattern, registered the moment the hidden-street layer asks for it.
+    m.setMissingStyleImageResolver((id) => {
+      if (id === HATCH && !m.hasImage(HATCH)) m.addImage(HATCH, hatch())
     })
+    m.on('styledata', () => {
+      if (m.getSource('segments')) setReady(true)
+    })
+    m.on('click', (e) => {
+      if (!m.getLayer('segment-fill')) return
+      const hit = m.queryRenderedFeatures(e.point, { layers: [...HIT_LAYERS] })[0]
+      onSelectRef.current((hit?.properties?.id as string | undefined) ?? null)
+    })
+    for (const layer of HIT_LAYERS) {
+      m.on('mouseenter', layer, () => (m.getCanvas().style.cursor = 'pointer'))
+      m.on('mouseleave', layer, () => (m.getCanvas().style.cursor = ''))
+    }
     map.current = m
     return () => {
       m.remove()

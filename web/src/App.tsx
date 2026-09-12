@@ -24,7 +24,12 @@ interface StormDetail {
 
 export function App() {
   const auth = useOwnerAuth()
-  const [mode, setMode] = useState<Mode>('live')
+  // #storms links straight to the storm replay.
+  const [mode, setModeState] = useState<Mode>(() => (window.location.hash === '#storms' ? 'storm' : 'live'))
+  const setMode = (m: Mode) => {
+    setModeState(m)
+    window.history.replaceState(null, '', m === 'storm' ? '#storms' : window.location.pathname + window.location.search)
+  }
   const [aboutOpen, setAboutOpen] = useState(false)
   const [segments, setSegments] = useState<Segment[] | null>(null)
   const [loadProblem, setLoadProblem] = useState<string | null>(null)
@@ -148,7 +153,7 @@ export function App() {
           <Legend
             title={mode === 'live' ? 'Pump cycles per hour, per home' : 'Water pumped per home in this storm'}
             max={max}
-            unit={mode === 'live' ? '/h' : 'L'}
+            unit={mode === 'live' ? 'cycles/h' : 'L'}
           />
           {mode === 'storm' && <StormGauge storms={storms} index={index} onChange={(i) => setStormIndex(clampIndex(i, storms.length))} />}
         </div>

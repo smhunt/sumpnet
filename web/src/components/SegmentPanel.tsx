@@ -27,10 +27,10 @@ export function SegmentPanel({ mode, segments, selected, statuses, stormMetrics,
           <p className="lede">
             <span className="live-dot" data-state={connection} aria-hidden="true" />
             {connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting' : 'Reconnecting'}
-            {asOf ? `, readings to ${formatDateTime(asOf)}.` : '.'}
+            {asOf ? `, readings to ${formatDateTime(asOf)}` : ''}
           </p>
         ) : (
-          <p className="lede">{storm ? `Storm starting ${formatDateTime(storm.startedAt)}.` : 'Pick a storm on the gauge.'}</p>
+          <p className="lede">{storm ? `Storm starting ${formatDateTime(storm.startedAt)}` : 'Pick a storm on the gauge.'}</p>
         )}
         <p>
           {visible} of {segments.length} streets have enough reporting homes to show. Choose a street for details.
