@@ -17,9 +17,45 @@ As of 2026-09-13. Session entries below, newest first, hold the details and acce
 | 8 — AWS + load test | not started |
 | 9 — Pilot | not started |
 
-In flight: the Phase 5 live map check; the real-geography Timberwalk simulation with observed ECCC rain (`feature/timberwalk-real-sim`, PR open, live seed and replay after merge). Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate. Not done yet: serving `inflow_est_l` through QueryService.
+In flight: the Phase 5 live map check in a visible browser window (the automation tab is hidden, so MapLibre never paints there). Timberwalk real-geography simulation merged (PR #12) and live since 2026-09-13: 190 homes on 9 segments, observed ECCC rain 2026-08-01..09-12 replayed. Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate; the County of Middlesex data licence; a measured basis for segment kinds. Not done yet: serving `inflow_est_l` through QueryService; linking the owner home (needs a Clerk subject).
 
 ## Session log (newest first)
+
+### 2026-09-13 (live Timberwalk seed and observed-rain replay, `main` at 45dd0f1)
+- PR #12 merged after 17/17 checks. The worktree's `data/` cache was copied into the main checkout (gitignored), so
+  home ids and DevEUIs match the agent's verified run.
+- **Cleanup:** the synthetic 60-home demo (seed 42, `seg-01`..`seg-08`) was deleted from the live database in one
+  transaction: 60 homes, 62 devices, 8 segments, their telemetry, alerts, detections, gauge rainfall and the April
+  gauge storm. ECCC rainfall was kept.
+- **Seed:** `make seed SITE=timberwalk`: 9 segments with geometry, 190 homes, 190 linked devices. No owner link:
+  `DEMO_OWNER_SUBJECT` is unset until Clerk is configured.
+- **Replay:** `make sim SCENARIO=eccc SITE=timberwalk FROM=2026-08-01 TO=2026-09-12 SPEED=0`: 1,017,470 events in
+  about 3 min, hash `04ea5d73…46a9` (identical to the agent's in-memory run). Stored: 765,048 readings, 238,908
+  cycles, 2,419 storm-mode summaries, 8,941 gauge rainfall rows.
+- **Storms from storm-analytics** (gauge-sourced, closed, 190 homes each; medians over homes):
+
+  | Storm | Rain mm | Peak mm/h | Median lag min | Median recession min | Mean `inflow_est_l` |
+  |---|---|---|---|---|---|
+  | 08-02..03 | 34.8 | 12.0 | 79.0 | 835 | 5,178 |
+  | 08-07 | 59.8 | 40.4 | 41.4 | 1,173 | 8,937 |
+  | 08-12 | 6.8 | 7.2 | 45.0 | 991 | 1,180 |
+  | 08-23..24 | 29.8 | 9.6 | 25.0 | 864 | 4,785 |
+  | 08-30..31 | 34.8 | 8.0 | 53.0 | 1,163 | 5,627 |
+  | 09-02..03 | 32.0 | 14.4 | 46.5 | 584 | 4,821 |
+  | 09-03 | 5.6 | 4.8 | 49.0 | 882 | 945 |
+  | 09-09 | 13.4 | 4.0 | 56.5 | 933 | 2,181 |
+
+  Totals agree with the simulator truth within 0.1 mm and with ECCC daily totals within 2 mm, except the
+  09-02/03 rain, which splits into two storms, as in the agent's run.
+- **Alerts after the replay:** 190 open OFFLINE (wall-clock sweep; replay data ends 2026-09-12), plus 26 float-high,
+  71 continuous-run and 69 short-cycling from the heavy storms on healthy simulated homes. No SMTP host is set, so
+  notifications were log-only.
+- **Dashboard check (Claude in Chrome):** the live sidebar lists the 9 real segments, and Timberwalk Close was
+  suppressed (k < 3) until enough homes reported. The map requested OSM tiles at z16–z18 around Timberwalk and a
+  probe module worker started, but the automation tab reports `visibilityState=hidden` with 0 animation frames, so
+  MapLibre never painted there. A visible-window check is still needed.
+- **Operations:** the harness killed background tasks twice for "low memory" while the Mac had 39–47 % free. The
+  Vite dev server now runs detached (`nohup`), and long waits run in the foreground.
 
 ### 2026-09-13 (real-geography Timberwalk site and observed ECCC rain, branch `feature/timberwalk-real-sim`)
 - **Owner decisions:** simulate the 7 core Timberwalk streets (plan 39T-MC0401 plus Timberwalk Close) by default;
