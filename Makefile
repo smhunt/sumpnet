@@ -65,22 +65,28 @@ TO   ?=
 eccc-import:
 	go run ./cmd/dataimport eccc -from $(FROM) -to $(TO)
 
-## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES)
+## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES);
+## SITE=timberwalk uses that site snapshot instead of HOMES; SCENARIO=eccc FROM=… TO=… replays observed rain
 SCENARIO ?= storm50
 SEED     ?= 42
 SPEED    ?= 60
 HOMES    ?= 60
 sim: env
 	@mkdir -p loadtest/results
-	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) -homes $(HOMES) \
+	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) \
+	  $(if $(SITE),-site-file data/sites/$(SITE).json,-homes $(HOMES)) \
+	  $(if $(filter eccc,$(SCENARIO)),-from $(FROM) -to $(TO)) \
 	  -sink mqtt -mqtt-url mqtt://localhost:$$(grep '^MQTT_PORT=' deploy/compose/.env | cut -d= -f2) \
-	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED).json -hash
+	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED)$(if $(SITE),-$(SITE)).json -hash
 
-## seed: demo segments (illustrative Timberwalk geometry) + the simulator's homes/devices (SEED, HOMES);
-## DEMO_OWNER_SUBJECT=user_... (or the .env value) links that Clerk user to home 0
+## seed: segments + the simulator's homes/devices (SEED, HOMES; or SITE=timberwalk for real streets);
+## DEMO_OWNER_SUBJECT=user_... (or the .env value) links that Clerk user to home 0, or with SITE to
+## OWNER_ADDRESS="<number> <STREET>"
 DEMO_OWNER_SUBJECT ?= $$(grep '^DEMO_OWNER_SUBJECT=' deploy/compose/.env | cut -d= -f2)
+OWNER_ADDRESS ?=
 seed: env
-	go run ./cmd/seed -database-url "$(DB_URL)" -seed $(SEED) -homes $(HOMES) -owner-subject "$(DEMO_OWNER_SUBJECT)"
+	go run ./cmd/seed -database-url "$(DB_URL)" -seed $(SEED) -owner-subject "$(DEMO_OWNER_SUBJECT)" \
+	  $(if $(SITE),-site-file data/sites/$(SITE).json -owner-address "$(OWNER_ADDRESS)",-homes $(HOMES))
 
 ## web-*: the dashboard in web/ (Vite + React + MapLibre, https on 3034)
 web-install:
