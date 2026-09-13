@@ -32,6 +32,8 @@ type RainGaugeParams struct {
 	DevAddr    string        `json:"dev_addr"`
 	Name       string        `json:"name"`
 	Location   string        `json:"location"`
+	Lon        float64       `json:"lon,omitempty"` // set on a site
+	Lat        float64       `json:"lat,omitempty"`
 	MMPerTipUM int           `json:"mm_per_tip_um"`
 	WakePhase  time.Duration `json:"wake_phase"`
 	RSSIBase   [2]int        `json:"rssi_base"`

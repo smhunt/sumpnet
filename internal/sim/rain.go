@@ -1,6 +1,9 @@
 package sim
 
 import (
+	"errors"
+	"fmt"
+	"math"
 	"math/rand/v2"
 	"sort"
 	"time"
@@ -89,4 +92,62 @@ func rainSeries(h Hyetograph, duration time.Duration, jitter float64, r *rand.Ra
 		out[i] = v
 	}
 	return out
+}
+
+// minuteSeries is rainSeries for an explicit per-minute intensity series.
+func minuteSeries(minutes []float64, duration time.Duration, jitter float64, r *rand.Rand) []float64 {
+	n := int(duration/time.Minute) + 1
+	out := make([]float64, n)
+	copy(out, minutes)
+	if jitter > 0 {
+		for i, v := range out {
+			if v > 0 {
+				out[i] = v * (1 + jitter*(2*r.Float64()-1))
+			}
+		}
+	}
+	return out
+}
+
+// HourlyRain is one observed hour: MM fell in the hour ending at End.
+type HourlyRain struct {
+	End time.Time `json:"hour_end"`
+	MM  float64   `json:"mm"`
+}
+
+// ObservedRainScenario builds a scenario whose rain is an observed hourly
+// series (e.g. ECCC LONDON CS) over [from, to). The virtual start must be
+// from, so simulated storms line up with the observations. Each hour's amount
+// is spread evenly over its 60 minutes, which is exactly how the rainfall
+// table stores an ECCC hour (one 3600 s interval) and preserves every total;
+// the part of an hour outside [from, to) is dropped. Hours absent from hours
+// are dry. No other scenario effect (jitter, multipliers, outages, health
+// overrides) is applied.
+func ObservedRainScenario(name, description string, from, to time.Time, hours []HourlyRain) (*Scenario, error) {
+	if !to.After(from) {
+		return nil, fmt.Errorf("sim: observed rain: to %s is not after from %s", to.Format(time.RFC3339), from.Format(time.RFC3339))
+	}
+	if from.Truncate(time.Minute) != from || to.Truncate(time.Minute) != to {
+		return nil, errors.New("sim: observed rain: from and to must be whole minutes")
+	}
+	duration := to.Sub(from)
+	minutes := make([]float64, int(duration/time.Minute))
+	seen := make(map[int64]bool, len(hours))
+	for _, h := range hours {
+		if h.End.Truncate(time.Minute) != h.End {
+			return nil, fmt.Errorf("sim: observed rain: hour ending %s is not on a minute", h.End.Format(time.RFC3339))
+		}
+		if h.MM < 0 || math.IsNaN(h.MM) || math.IsInf(h.MM, 0) {
+			return nil, fmt.Errorf("sim: observed rain: hour ending %s has %v mm", h.End.Format(time.RFC3339), h.MM)
+		}
+		if seen[h.End.Unix()] {
+			return nil, fmt.Errorf("sim: observed rain: hour ending %s appears twice", h.End.Format(time.RFC3339))
+		}
+		seen[h.End.Unix()] = true
+		first := int(h.End.Add(-time.Hour).Sub(from) / time.Minute)
+		for m := max(first, 0); m < first+60 && m < len(minutes); m++ {
+			minutes[m] = h.MM // mm/h, constant within the hour
+		}
+	}
+	return &Scenario{Name: name, Description: description, Duration: duration, RainMinutes: minutes}, nil
 }
