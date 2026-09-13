@@ -1,0 +1,12 @@
+{
+  "name": "timberwalk-plus-plant-streets",
+  "description": "timberwalk-plus-basil-bowman plus Woodlily Lane, Meadowsweet Crescent, Periwinkle Drive and Red Clover Court.",
+  "extends": "timberwalk-plus-basil-bowman",
+  "default_kind": "standard",
+  "streets": [
+    {"name": "WOODLILY LANE", "label": "Woodlily Lane"},
+    {"name": "MEADOWSWEET CRES", "label": "Meadowsweet Crescent"},
+    {"name": "PERIWINKLE DR", "label": "Periwinkle Drive"},
+    {"name": "RED CLOVER CRT", "label": "Red Clover Court"}
+  ]
+}

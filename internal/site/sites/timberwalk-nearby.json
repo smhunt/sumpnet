@@ -1,0 +1,14 @@
+{
+  "name": "timberwalk-nearby",
+  "description": "timberwalk-plus-plant-streets plus Ashwood Crescent, Maplewood Lane, Stone Field Gate, Havenwood Lane and Havenwood Street (plans 39T-MC0601 and 39T-MC0602).",
+  "extends": "timberwalk-plus-plant-streets",
+  "plans": ["39T-MC0601", "39T-MC0602"],
+  "default_kind": "standard",
+  "streets": [
+    {"name": "ASHWOOD CRES", "label": "Ashwood Crescent"},
+    {"name": "MAPLEWOOD LANE", "label": "Maplewood Lane"},
+    {"name": "STONE FIELD GATE", "label": "Stone Field Gate"},
+    {"name": "HAVENWOOD LANE", "label": "Havenwood Lane"},
+    {"name": "HAVENWOOD ST", "label": "Havenwood Street"}
+  ]
+}

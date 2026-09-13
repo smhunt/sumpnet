@@ -7,10 +7,13 @@ About (`web/src/about.ts`).
 
 ## [Unreleased]
 ### Added
+- Real-geography simulation (ADR 0008): `make site-import SITE=timberwalk` caches the County of Middlesex address points and road centrelines for a committed street list (`internal/site/sites/`) in the gitignored `data/`, and builds segments from Timberwalk's real streets, splitting streets with more than 40 homes into blocks and giving each an outline that never overlaps its neighbours. `make seed SITE=…` and `make sim SITE=…` use the snapshot. Home ids and DevEUIs are salted hashes, and no address or house position is stored or emitted. Default site: 7 streets, 190 homes, 9 segments; three larger nearby street sets (up to 19 streets, 627 homes) are cached too.
+- Observed rain: `make eccc-import FROM=… TO=…` caches ECCC LONDON CS hourly rain, and `make sim SCENARIO=eccc FROM=… TO=…` replays it with the virtual clock at FROM, so simulated storms line up with the rainfall the live weather service stores. Over 2026-08-01 → 09-12 the Timberwalk run finds the summer's 8 storms (6.9–59.7 mm).
 - storm-analytics: storm inflow estimate from each home's pump rate, calibrated on the dry-weather cycles baseflow uses (`inflow_est_l`, `pump_rate_lps`, `pump_rate_source`; migration 0006), stored beside the §9 pit-drop `volume_l`, which stays the floor. In the Phase 4 e2e the pump rate is within 5 % of the simulator's and `inflow_est_l` within 2.2 % of the true inflow (PR #9). Not yet served by the API.
 - Research report `docs/research/pump-flow-bucket-test.md`: what a homeowner bucket test can measure (mainly effective pit area) and proposals awaiting owner decisions (PR #10).
 
 ### Changed
+- Dashboard: the map opens on Timberwalk's real location before fitting the seeded segments, and the legend no longer calls every outline illustrative.
 - Documentation: root README, architecture maps in `docs/README.md` (system, data flow, data model, repository layout, API, operations runbook), CLAUDE.md, progress, this changelog and the in-app About data brought in line with the code.
 
 ### Fixed

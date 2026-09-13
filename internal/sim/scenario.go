@@ -2,6 +2,7 @@ package sim
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 )
@@ -20,6 +21,10 @@ type Scenario struct {
 	Description string        `json:"description"`
 	Duration    time.Duration `json:"duration"`
 	Rain        Hyetograph    `json:"rain"`
+	// RainMinutes, when set, replaces Rain with an explicit intensity (mm/h)
+	// for each virtual minute from the start; minutes past its end are dry.
+	// Observed-rain scenarios (ObservedRainScenario) use it.
+	RainMinutes []float64 `json:"rain_minutes,omitempty"`
 	// RainJitter is the ± fraction applied per minute from the scenario RNG.
 	RainJitter float64 `json:"rain_jitter"`
 	// Multipliers on every home's parameters (1.0 = unchanged).
@@ -43,7 +48,27 @@ func (s *Scenario) validate() error {
 			return fmt.Errorf("sim: scenario %q: rain breakpoints not sorted", s.Name)
 		}
 	}
+	if len(s.RainMinutes) > 0 && len(s.Rain) > 0 {
+		return fmt.Errorf("sim: scenario %q: set rain or rain_minutes, not both", s.Name)
+	}
+	for i, v := range s.RainMinutes {
+		if v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("sim: scenario %q: rain_minutes[%d] = %v", s.Name, i, v)
+		}
+	}
 	return nil
+}
+
+// RainTotal is the scenario's rain in millimetres before jitter.
+func (s *Scenario) RainTotal() float64 {
+	if len(s.RainMinutes) == 0 {
+		return s.Rain.Total()
+	}
+	var mm float64
+	for _, v := range s.RainMinutes {
+		mm += v / 60
+	}
+	return mm
 }
 
 func (s *Scenario) mul(v float64) float64 {

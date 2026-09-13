@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test test-integration sim seed build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail web-install web-dev web-test web-build
+.PHONY: all tools proto lint fmt test test-integration sim seed site-import eccc-import build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail web-install web-dev web-test web-build
 
 all: lint test
 
@@ -53,22 +53,40 @@ test:
 test-integration:
 	go test -race -count=1 -tags integration ./...
 
-## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES)
+## site-import: County of Middlesex address points and road centrelines for SITE (default timberwalk) into the
+## gitignored data/ cache and snapshot (REFRESH=1 re-queries, OFFLINE=1 cache only, LOCATE="<number> <STREET>")
+SITE ?=
+site-import:
+	go run ./cmd/dataimport site -site $(or $(SITE),timberwalk) $(if $(REFRESH),-refresh) $(if $(OFFLINE),-offline) $(if $(LOCATE),-locate "$(LOCATE)")
+
+## eccc-import: ECCC LONDON CS hourly rain for hours ending in (FROM, TO] into data/rain/ (dates are UTC midnight)
+FROM ?=
+TO   ?=
+eccc-import:
+	go run ./cmd/dataimport eccc -from $(FROM) -to $(TO)
+
+## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES);
+## SITE=timberwalk uses that site snapshot instead of HOMES; SCENARIO=eccc FROM=… TO=… replays observed rain
 SCENARIO ?= storm50
 SEED     ?= 42
 SPEED    ?= 60
 HOMES    ?= 60
 sim: env
 	@mkdir -p loadtest/results
-	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) -homes $(HOMES) \
+	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) \
+	  $(if $(SITE),-site-file data/sites/$(SITE).json,-homes $(HOMES)) \
+	  $(if $(filter eccc,$(SCENARIO)),-from $(FROM) -to $(TO)) \
 	  -sink mqtt -mqtt-url mqtt://localhost:$$(grep '^MQTT_PORT=' deploy/compose/.env | cut -d= -f2) \
-	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED).json -hash
+	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED)$(if $(SITE),-$(SITE)).json -hash
 
-## seed: demo segments (illustrative Timberwalk geometry) + the simulator's homes/devices (SEED, HOMES);
-## DEMO_OWNER_SUBJECT=user_... (or the .env value) links that Clerk user to home 0
+## seed: segments + the simulator's homes/devices (SEED, HOMES; or SITE=timberwalk for real streets);
+## DEMO_OWNER_SUBJECT=user_... (or the .env value) links that Clerk user to home 0, or with SITE to
+## OWNER_ADDRESS="<number> <STREET>"
 DEMO_OWNER_SUBJECT ?= $$(grep '^DEMO_OWNER_SUBJECT=' deploy/compose/.env | cut -d= -f2)
+OWNER_ADDRESS ?=
 seed: env
-	go run ./cmd/seed -database-url "$(DB_URL)" -seed $(SEED) -homes $(HOMES) -owner-subject "$(DEMO_OWNER_SUBJECT)"
+	go run ./cmd/seed -database-url "$(DB_URL)" -seed $(SEED) -owner-subject "$(DEMO_OWNER_SUBJECT)" \
+	  $(if $(SITE),-site-file data/sites/$(SITE).json -owner-address "$(OWNER_ADDRESS)",-homes $(HOMES))
 
 ## web-*: the dashboard in web/ (Vite + React + MapLibre, https on 3034)
 web-install:

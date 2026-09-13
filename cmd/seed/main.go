@@ -1,7 +1,9 @@
-// Command seed loads the demo neighbourhood (illustrative Timberwalk segment
-// polygons, the simulator's homes and devices, and optionally a Clerk owner
-// link) into the sumpnet database. Run it after migrations and before a
-// simulator replay: `make seed [DEMO_OWNER_SUBJECT=user_...]`.
+// Command seed loads the demo neighbourhood (segment polygons, the
+// simulator's homes and devices, and optionally a Clerk owner link) into the
+// sumpnet database. Run it after migrations and before a simulator replay:
+// `make seed [DEMO_OWNER_SUBJECT=user_...]` for the synthetic neighbourhood,
+// or `make seed SITE=timberwalk OWNER_ADDRESS="<number> <STREET>"
+// DEMO_OWNER_SUBJECT=user_...` for a real-geography site snapshot.
 package main
 
 import (
@@ -16,6 +18,7 @@ import (
 	"time"
 
 	"github.com/smhunt/sumpnet/internal/seed"
+	"github.com/smhunt/sumpnet/internal/site"
 	"github.com/smhunt/sumpnet/internal/store"
 	"github.com/smhunt/sumpnet/internal/store/sqlcgen"
 )
@@ -30,7 +33,9 @@ func run() int {
 	homes := fs.Int("homes", def.Homes, "simulated homes (match `make sim HOMES`)")
 	segments := fs.Int("segments", def.Segments, "simulated segments")
 	owner := fs.String("owner-subject", os.Getenv("DEMO_OWNER_SUBJECT"), "Clerk user id to link to one home (default $DEMO_OWNER_SUBJECT)")
-	ownerHome := fs.Int("owner-home", envInt("DEMO_OWNER_HOME", 0), "index of the home to link the owner to")
+	ownerHome := fs.Int("owner-home", envInt("DEMO_OWNER_HOME", 0), "index of the home to link the owner to (synthetic neighbourhood)")
+	siteFile := fs.String("site-file", "", "real-geography site snapshot (make site-import); replaces -homes and -segments")
+	ownerAddress := fs.String("owner-address", os.Getenv("OWNER_ADDRESS"), `with -site-file: the owner's address, "<number> <STREET>" (default $OWNER_ADDRESS)`)
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return 2
 	}
@@ -43,7 +48,20 @@ func run() int {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	res, err := apply(ctx, *dsn, seed.Options{Seed: *seedN, Homes: *homes, Segments: *segments, OwnerSubject: *owner, OwnerHome: *ownerHome})
+	o := seed.Options{Seed: *seedN, Homes: *homes, Segments: *segments, OwnerSubject: *owner, OwnerHome: *ownerHome}
+	if *siteFile != "" {
+		snap, err := site.LoadSnapshot(*siteFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "seed:", err)
+			return 2
+		}
+		if o.Site, err = site.Build(snap); err != nil {
+			fmt.Fprintln(os.Stderr, "seed:", err)
+			return 2
+		}
+		o.OwnerAddress = *ownerAddress
+	}
+	res, err := apply(ctx, *dsn, o)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "seed:", err)
 		return 1

@@ -98,6 +98,7 @@ export const ROADMAP: RoadmapGroup[] = [
     category: 'In progress',
     items: [
       { title: 'Check a live storm replay on the map against the running stack', priority: 'high' },
+      { title: 'Replay this summer’s storms over simulated homes on Timberwalk’s real streets', priority: 'high' },
     ],
   },
   {

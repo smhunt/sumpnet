@@ -69,8 +69,14 @@ make tools          # buf, golangci-lint, sqlc, migrate into ./bin (versions in 
 make up             # creates deploy/compose/.env from .env.example, builds, waits for every healthcheck
 make ps             # every service should be "healthy"
 
-make seed SEED=42 HOMES=60                              # illustrative Timberwalk streets + the simulator's homes and devices
+make seed SEED=42 HOMES=60                              # illustrative street outlines + the simulator's homes and devices
 make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0 # 50 mm storm with 3-day lead and tail, unpaced; truth -> loadtest/results/
+
+# or: Timberwalk's real streets with this summer's real rain (see "Real-geography sites" below)
+make site-import SITE=timberwalk                        # County of Middlesex data -> gitignored data/
+make eccc-import FROM=2026-08-01 TO=2026-09-12          # ECCC hourly rain -> gitignored data/rain/
+make seed SITE=timberwalk                               # add OWNER_ADDRESS="<number> <STREET>" DEMO_OWNER_SUBJECT=user_... to link an owner
+make sim SCENARIO=eccc SITE=timberwalk FROM=2026-08-01 TO=2026-09-12 SPEED=0
 
 cp web/.env.example web/.env.local           # optional: VITE_CLERK_PUBLISHABLE_KEY enables owner sign-in
 make web-install && make web-dev             # dashboard on https://dev.ecoworks.ca:3034
@@ -209,6 +215,33 @@ answers.
 go run ./cmd/simulator -scenario storm50 -seed 42 -sink stdout -hash > events.jsonl   # JSONL out, stream hash on stderr
 ```
 
+### Real-geography sites
+
+The simulator can also run on Timberwalk's real streets, with one simulated home per County of
+Middlesex address point, driven by the hourly rain Environment Canada recorded at London
+([ADR 0008](docs/adr/0008-real-geography-sites.md)).
+
+- **Street lists** are committed in `internal/site/sites/`. `timberwalk` (the default) holds the 7
+  streets of plan 39T-MC0401 plus Timberwalk Close: 190 homes in 9 segments. Timberwalk Trail and
+  Mayapple Crescent are split into two blocks each, because streets with more than 40 homes are split.
+  Three larger nearby sets are cached as well (`go run ./cmd/dataimport sites`).
+- **`make site-import SITE=…`** fetches the address points and road centrelines once. It keeps the raw
+  query pages per street and a normalised snapshot under the gitignored `data/`. Each segment gets an
+  outline drawn around its street and houses that never overlaps its neighbours. `OFFLINE=1` rebuilds
+  from the cache alone; `REFRESH=1` re-queries.
+- **`make eccc-import FROM=… TO=…`** caches LONDON CS hourly rain. `make sim SCENARIO=eccc` spreads each
+  hour evenly over its minutes and starts the simulation clock at FROM, so simulated storms line up with
+  the `rainfall` rows the weather service stores. Over 2026-08-01 → 09-12 the run finds the summer's
+  8 storms, from 6.9 mm to 59.7 mm.
+- **Privacy.** Home ids and DevEUIs are salted hashes of the address, and the salt stays in the
+  gitignored cache. No address or house position reaches the database, the API or the dashboard, and
+  public views stay street aggregates with k ≥ 3. Scenarios that pin a pump fault on a specific home
+  are refused on a site; any alarms a heavy real storm triggers on a simulated home are synthetic and
+  owner-view only. The owner's home is linked only with `OWNER_ADDRESS` at seed time.
+- **Licence.** The County data licence is unconfirmed, so nothing under `data/` is committed and no map
+  built from it should be published until it is (`prompt_plan.md` §14). The ECCC data are under ECCC's
+  Data Services End-use Licence: "Data Source: Environment and Climate Change Canada".
+
 ## Status
 
 | Phase | State |
@@ -274,3 +307,4 @@ measured yet; the Phase 8 load test will show which limit bites first.
 | [0005](docs/adr/0005-privacy-thresholds.md) | Privacy thresholds: segment aggregation with k ≥ 3 |
 | [0006](docs/adr/0006-api-gateway-auth.md) | api-gateway: Clerk owner auth, one gRPC surface, private neighbourhood stream |
 | [0007](docs/adr/0007-storm-analytics.md) | Storm analytics: recompute from source, gauge-first rainfall |
+| [0008](docs/adr/0008-real-geography-sites.md) | Real-geography sites from County of Middlesex open data |

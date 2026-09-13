@@ -12,8 +12,8 @@ sumpnet is a neighbourhood sump-pump and drainage monitoring platform (pilot: Ti
 
 - Work proceeds in phases (§12 of `prompt_plan.md`). **Don't start a phase until the previous phase's acceptance criteria pass.** Tick the checkboxes in `prompt_plan.md` as items land.
 - Update `progress.md` at the end of every session: the Status table plus a session entry, newest first. Add user-visible changes to `CHANGELOG.md` and to the in-app copy in `web/src/about.ts` (changelog and roadmap).
-- Record significant decisions as ADRs in `docs/adr/` (0001–0007 so far) and add each one to `docs/adr/README.md`.
-- Resolve open questions in §14 with the user; don't pick an answer silently (still open: gateway sites, simulator calibration before public numbers, licence, per-owner alert email, and the bucket-test proposals in `docs/research/pump-flow-bucket-test.md`, chiefly whether a bucket test calibrates pit area instead of overriding the pump rate).
+- Record significant decisions as ADRs in `docs/adr/` (0001–0008 so far) and add each one to `docs/adr/README.md`.
+- Resolve open questions in §14 with the user; don't pick an answer silently (still open: gateway sites, simulator calibration before public numbers, licence, the County of Middlesex data licence, whether real-street segment kinds need a measured basis, per-owner alert email, and the bucket-test proposals in `docs/research/pump-flow-bucket-test.md`, chiefly whether a bucket test calibrates pit area instead of overriding the pump rate).
 - When services, tables, ports or routes change, update the maps together. The Mermaid system diagram is identical in `README.md` and `docs/README.md`. The ASCII diagram below matches `prompt_plan.md` §3. The data-flow and ER diagrams live in `docs/README.md`. The repository layout is in `docs/README.md` and `prompt_plan.md` §6. The ports tables are in `README.md`, `docs/README.md` and the Ports section below.
 
 ## Commands
@@ -34,8 +34,12 @@ make up                     # docker compose up -d --build --wait (blocks until 
 make down / make ps / make logs S=<service>
 make env                    # copies deploy/compose/.env.example → .env if missing (up, build, sim, seed, db and testmail targets do this)
 make clean                  # rm -rf ./bin gen — gen/ is committed, so restore it with make proto or git checkout
-make seed [SEED=42 HOMES=60 DEMO_OWNER_SUBJECT=user_...]   # illustrative Timberwalk segments + the simulator's homes/devices; optional Clerk owner link to home 0
+make seed [SEED=42 HOMES=60 DEMO_OWNER_SUBJECT=user_...]   # illustrative segments + the simulator's homes/devices; optional Clerk owner link to home 0
 make sim SCENARIO=storm50 SEED=42 SPEED=60 HOMES=60        # replay into the stack's Mosquitto; truth → loadtest/results/
+make site-import SITE=timberwalk [REFRESH=1 | OFFLINE=1] [LOCATE="<number> <STREET>"]   # County address points + road centrelines → gitignored data/cache/middlesex/ and data/sites/<site>.json
+make eccc-import FROM=2026-08-01 TO=2026-09-12             # ECCC LONDON CS hourly rain → gitignored data/rain/ (dates are UTC midnight)
+make seed SITE=timberwalk [OWNER_ADDRESS="<number> <STREET>" DEMO_OWNER_SUBJECT=user_...]   # the site's real segments + one home/device per address
+make sim SCENARIO=eccc SITE=timberwalk FROM=2026-08-01 TO=2026-09-12 SPEED=0   # observed rain over the site; virtual start = FROM
 make migrate-up / migrate-down / migrate-new NAME=x        # golang-migrate against the compose DB (from .env); migrate-down steps back one
 make db-shell               # psql into the compose Postgres
 make alerts-testmail        # one test email through the SMTP provider in .env (Resend)
@@ -54,6 +58,8 @@ The simulator is a CLI: in compose it lives behind `COMPOSE_PROFILES=sim` and ex
 
 Single test: `go test -race -run TestName ./internal/sim/...`. `internal/sim` takes ~40 s under `-race` (integer-heavy loop); iterate with plain `go test ./internal/sim/` (<1 s) and let `make test` do the race run.
 
+Site and rain imports: `go run ./cmd/dataimport sites` lists the committed site configs; `-site-file` (simulator, seed) and `-scenario eccc -from -to` (simulator) read only the gitignored caches those imports write; the simulator and seed never fetch.
+
 Simulator CLI: `go run ./cmd/simulator -list-scenarios`; `-sink stdout -hash` writes JSONL to stdout and the SHA-256 of the event stream to stderr (logs also go to stderr, so stdout stays pure JSONL). Same seed ⇒ byte-identical output; never introduce `time.Now()`, `uuid.New()` or map iteration into `internal/sim`'s emission path.
 
 **Integration tests from Claude's Bash tool:** testcontainers calls the Docker credential helper (`osxkeychain`), which hangs in the sandboxed shell waiting on Keychain. Run them as `DOCKER_CONFIG=<dir containing an empty config.json> go test -tags integration ./...` (public images need no auth). From a normal terminal `make test-integration` works as-is.
@@ -71,6 +77,7 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - storm-analytics does not backfill columns a migration adds. Stop it, run `update consumer_watermarks set inserted_at='2000-01-01' where consumer='storm-analytics' and source='cycle_events'`, then start it. Rewinding only the `rainfall` watermark is not enough. Runbook: `docs/README.md`.
 - Sim home 9 (~500 dry-weather cycles/day) never gets a baseflow; its NULL lag, recession and pump rate are by design.
 - No Clerk values: the gateway logs `auth:false` and the dashboard shows public views only.
+- Real streets (not yet run on the live stack): `make site-import SITE=timberwalk`; `make eccc-import FROM=2026-08-01 TO=2026-09-12`; `make seed SITE=timberwalk OWNER_ADDRESS="<number> <STREET>" DEMO_OWNER_SUBJECT=user_...`; `make sim SCENARIO=eccc SITE=timberwalk FROM=2026-08-01 TO=2026-09-12 SPEED=0`. A database that already holds `seg-01`…`seg-08` keeps them, and the map then fits both sets.
 
 ## Ingest path invariants
 
@@ -103,6 +110,15 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 
 - Per-home data is served only on owner-scoped paths: the caller's Clerk subject must be linked in `home_owners`. Public views aggregate to segments through `internal/privacy` only (`MinHomes = 3`; suppressed aggregates zero every number, including live cycle rate and alert count). Unlinked devices never count as reporting homes.
 - `MinHomes` is a constant; changing it is a policy change that needs a new ADR. The MCP server (Phase 6) reads through QueryService, never SQL, so it inherits these rules.
+
+## Real-geography site invariants (ADR 0008)
+
+- County of Middlesex data (address points, road centrelines) and everything derived from it live only under the gitignored `data/`: the raw query cache per street, site snapshots, segment GeoJSON and the identity salt. The licence is unconfirmed (§14), so never commit any of it; tests use synthetic fixtures only.
+- The street lists are the committed configs `internal/site/sites/*.json` (`timberwalk` is the default; `extends` nests the larger cached sets). Change a site there, then `make site-import SITE=…`; cached streets need no network (`OFFLINE=1` proves it, `REFRESH=1` re-queries).
+- Never put an address, a house position or the salt into the database, protos, REST, the dashboard, tests, fixtures, configs, docs, commit messages or PR text. The owner's address is passed only at seed time (`OWNER_ADDRESS`); examples use `"<number> <STREET>"`. A site owner link is never made by index.
+- Site home ids, DevEUIs (`5e…`), DevAddrs and PCG streams are HMAC-SHA256 of the address keyed by `data/cache/middlesex/identity-salt.hex` (copied into each snapshot); a new salt changes every id, so re-seed. Homes are ordered by id, never by position. `internal/sim` gets ids, segment membership and coordinates for gauge placement only, and emits no coordinates.
+- A scenario with `HealthOverrides` is refused on a site (no pump failure pinned on a real address). Without `Config.Site`, every stream hash is unchanged.
+- `-scenario eccc` reads `data/rain/eccc-hourly-<station>.json`, refuses a window its fetches do not cover, spreads each hour evenly over its 60 minutes and starts the virtual clock at FROM.
 
 ## Gateway invariants (api-gateway, ADR 0006)
 

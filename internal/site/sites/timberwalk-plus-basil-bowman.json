@@ -1,0 +1,12 @@
+{
+  "name": "timberwalk-plus-basil-bowman",
+  "description": "Timberwalk plus Bowman Drive, Basil Crescent and Stone Field Lane to the north-east (plan 39T-MC1401 and neighbours).",
+  "extends": "timberwalk",
+  "plans": ["39T-MC1401"],
+  "default_kind": "standard",
+  "streets": [
+    {"name": "BOWMAN DR", "label": "Bowman Drive"},
+    {"name": "BASIL CRES", "label": "Basil Crescent"},
+    {"name": "STONE FIELD LANE", "label": "Stone Field Lane"}
+  ]
+}

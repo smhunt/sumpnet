@@ -9,8 +9,11 @@ import type { Segment } from '../lib/types'
 const TILE_URL = import.meta.env.VITE_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 const TILE_ATTRIBUTION =
   import.meta.env.VITE_TILE_ATTRIBUTION || '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-// Nominal centre of the illustrative Timberwalk outlines (Ilderton, ON).
-const TIMBERWALK: [number, number] = [-81.4236, 43.056]
+// Where the map opens before segments arrive: Timberwalk, Ilderton (Middlesex
+// Centre, ON). Once the segments load, the map fits their bounds, so it frames
+// whichever neighbourhood was seeded (the real streets of `make seed SITE=…` or
+// the illustrative outlines).
+const TIMBERWALK: [number, number] = [-81.3845, 43.0755]
 
 setWorkerUrl(workerUrl)
 

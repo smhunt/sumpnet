@@ -34,3 +34,8 @@ deploy/compose/data/
 
 # Simulator ground-truth exports (the stream hash is recorded in progress.md)
 loadtest/results/*.json
+
+# Local data caches (make site-import, make eccc-import). The County of
+# Middlesex data licence is unconfirmed (prompt_plan.md §14), and snapshots hold
+# real addresses and the home-id salt: never commit anything under data/.
+/data/

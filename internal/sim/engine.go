@@ -32,6 +32,11 @@ type Config struct {
 	// RainGauges is the number of tipping-bucket gauge nodes (fPort 5) at the
 	// ends of the neighbourhood; the pilot has 2 (§4). 0 = none.
 	RainGauges int
+	// Site replaces the synthetic neighbourhood with real streets and address
+	// points (Homes and Segments must then be 0). Scenarios with pump health
+	// overrides are refused on a site, so no default run pins a failure on a
+	// real address.
+	Site *Site
 }
 
 // Engine runs one scenario for one set of homes.
@@ -55,7 +60,24 @@ func New(cfg Config) (*Engine, error) {
 	if err := cfg.Scenario.validate(); err != nil {
 		return nil, err
 	}
-	if cfg.Homes <= 0 || cfg.Segments <= 0 || cfg.Segments > cfg.Homes {
+	if cfg.Site != nil {
+		if err := cfg.Site.validate(); err != nil {
+			return nil, err
+		}
+		if cfg.Homes != 0 || cfg.Segments != 0 {
+			return nil, fmt.Errorf("sim: homes (%d) and segments (%d) come from site %q; leave them 0", cfg.Homes, cfg.Segments, cfg.Site.Name)
+		}
+		if len(cfg.Scenario.HealthOverrides) > 0 {
+			return nil, fmt.Errorf("sim: scenario %q pins pump health on specific homes, which a real-address site does not allow", cfg.Scenario.Name)
+		}
+		for _, o := range cfg.Scenario.Outages {
+			for _, si := range o.SegmentIndexes {
+				if si < 0 || si >= len(cfg.Site.Segments) {
+					return nil, fmt.Errorf("sim: scenario %q outage segment %d is outside site %q (%d segments)", cfg.Scenario.Name, si, cfg.Site.Name, len(cfg.Site.Segments))
+				}
+			}
+		}
+	} else if cfg.Homes <= 0 || cfg.Segments <= 0 || cfg.Segments > cfg.Homes {
 		return nil, fmt.Errorf("sim: need 1 <= segments (%d) <= homes (%d)", cfg.Segments, cfg.Homes)
 	}
 	if cfg.RainGauges < 0 {
@@ -74,18 +96,36 @@ func New(cfg Config) (*Engine, error) {
 	nSteps := int(e.duration / time.Second)
 
 	scenarioRNG := rand.New(rand.NewPCG(cfg.Seed, 0)) //nolint:gosec // deterministic simulation
-	e.rain = rainSeries(cfg.Scenario.Rain, e.duration, cfg.Scenario.RainJitter, scenarioRNG)
+	if len(cfg.Scenario.RainMinutes) > 0 {
+		e.rain = minuteSeries(cfg.Scenario.RainMinutes, e.duration, cfg.Scenario.RainJitter, scenarioRNG)
+	} else {
+		e.rain = rainSeries(cfg.Scenario.Rain, e.duration, cfg.Scenario.RainJitter, scenarioRNG)
+	}
 
-	e.segments = buildSegments(cfg.Homes, cfg.Segments)
-	e.homes = make([]*home, cfg.Homes)
+	nHomes := cfg.Homes
+	if cfg.Site != nil {
+		e.segments = siteSegments(cfg.Site)
+		nHomes = len(cfg.Site.Homes)
+	} else {
+		e.segments = buildSegments(cfg.Homes, cfg.Segments)
+	}
+	e.homes = make([]*home, nHomes)
 	for _, seg := range e.segments {
 		seg := seg
 		for _, idx := range seg.HomeIndexes {
-			e.homes[idx] = newHome(idx, &seg, cfg.Scenario, cfg.Seed, nSteps)
+			id := syntheticIdentity(idx, cfg.Seed)
+			if cfg.Site != nil {
+				id = siteIdentity(cfg.Site.Homes[idx])
+			}
+			e.homes[idx] = newHome(idx, id, &seg, cfg.Scenario, cfg.Seed, nSteps)
 		}
 	}
 	for i := 0; i < cfg.RainGauges; i++ {
-		e.gauges = append(e.gauges, newGauge(i, cfg.Seed))
+		g := newGauge(i, cfg.Seed)
+		if cfg.Site != nil {
+			g.p.Location, g.p.Lon, g.p.Lat = siteGaugePlacement(cfg.Site, i)
+		}
+		e.gauges = append(e.gauges, g)
 	}
 	e.pacer = NewPacer(cfg.Start.UTC(), cfg.Speed)
 	return e, nil

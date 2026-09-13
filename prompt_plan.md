@@ -123,6 +123,7 @@ sumpnet/
 ├── cmd/                      one main package per binary
 │   ├── simulator/            CLI: deterministic neighbourhood replay (compose profile sim)
 │   ├── seed/                 CLI: demo segments, homes, devices, owner link (make seed)
+│   ├── dataimport/           CLI: County site import, ECCC hourly rain cache (make site-import, eccc-import)
 │   ├── lora-bridge/          ChirpStack uplink events -> ingest
 │   ├── mqtt-bridge/          Wi-Fi envelope uplinks -> ingest
 │   ├── ingest/               IngestService: idempotent bulk writes + NOTIFY
@@ -136,7 +137,9 @@ sumpnet/
 │   ├── platform/             config, slog, health/metrics endpoints, shutdown, healthcheck
 │   ├── codec/                fPort 1-5 binary payloads with golden vectors
 │   ├── chirpstack/           uplink topics and UplinkEvent JSON
-│   ├── sim/                  simulator engine, scenarios, rain gauges, sinks, truth
+│   ├── sim/                  simulator engine, scenarios, rain gauges, sinks, truth, sites, observed rain
+│   ├── site/                 site configs (sites/*.json), County ArcGIS import, segments and outlines, salted ids
+│   ├── raincache/            observed hourly rain cache for -scenario eccc
 │   ├── bridge/               shared MQTT consumer, bounded batchers, ingest client
 │   ├── lorabridge/           ChirpStack event decoder
 │   ├── nodebridge/           Wi-Fi envelope decoder
@@ -151,7 +154,7 @@ sumpnet/
 │   ├── privacy/              k >= 3 segment aggregates (ADR 0005)
 │   ├── auth/                 Clerk JWT verifier, gRPC interceptors; authtest/ test JWKS
 │   ├── gateway/              QueryService, WatchNeighbourhood hub, REST, CORS, TLS
-│   ├── seed/                 segments.geojson (illustrative outlines) + seeding
+│   ├── seed/                 segments.geojson (illustrative outlines) + seeding, synthetic or from a site
 │   ├── domain/               sentinel errors
 │   ├── testinfra/            testcontainers helpers: Postgres, Mosquitto, Mailpit
 │   ├── testpipeline/         in-process pipeline helpers for tests
@@ -164,6 +167,7 @@ sumpnet/
 ├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
 ├── docs/                     README.md (this map), node-mqtt.md, adr/, research/
 ├── loadtest/results/         make sim truth exports (gitignored JSON)
+├── data/                     gitignored: County query cache, site snapshots, ECCC rain (never committed)
 ├── .github/                  workflows/ci.yml, dependabot.yml
 ├── Dockerfile                one distroless image, --build-arg SERVICE=<name>
 ├── Makefile, .versions.env   make targets; pinned tool versions shared with CI
@@ -258,7 +262,15 @@ Estimated volume per cycle = `pit_area_m2 × (level_end_mm − level_start_mm) /
   - Station: **LONDON CS, CLIMATE_IDENTIFIER 6144478** (STN_ID 10999, 43.03 N 81.15 W, ≈23 km from Timberwalk). Hourly `PRECIP_AMOUNT` is populated (no nulls 2026-07-01 → 09-12; its 1990s rows are null). LONDON A (6144473, same airport) has hourly rows but `PRECIP_AMOUNT` is always null. No closer station reports hourly data; the next hourly stations are 74+ km away.
   - Interval semantics: `PRECIP_AMOUNT` at `UTC_DATE` is the precipitation in the hour **ending** at `UTC_DATE`, so `rainfall.ts = UTC_DATE − 1 h`, `interval_s = 3600`. Evidence: hourly sums over (06Z, 06Z] reproduce `climate-daily` `TOTAL_PRECIPITATION` on every June–September 2026 day with rain in the 06Z boundary hour (e.g. 2026-06-05: daily 8.1 mm, hour-ending sum 8.1, hour-beginning sum 2.8); 88/100 days match exactly vs 81 for hour-beginning, the rest differ by 0.1 mm rounding.
   - Data are published hours late and revised: the poller re-reads 48 h each hour (7 days on start), skips null or `M` hours, and only real changes are written. Env: `WEATHER_ECCC_ENABLED` (off switch), `WEATHER_ECCC_URL`, `WEATHER_ECCC_STATION`, `WEATHER_ECCC_POLL_INTERVAL`, `WEATHER_ECCC_BACKFILL`, `WEATHER_ECCC_LOOKBACK`, `WEATHER_ECCC_TIMEOUT`.
+  - Licence: MSC open data (GeoMet included) is under the **Environment and Climate Change Canada Data Services End-use Licence** (v2.1.1, `https://eccc-msc.github.io/open-data/licence/readme_en/`): copying, redistribution and adaptation are allowed with the attribution "Data Source: Environment and Climate Change Canada". Verified 2026-09-13; it is ECCC's own licence, not the Open Government Licence – Canada.
+  - Hourly LONDON CS amounts for 2026-08-01 → 09-12 are complete (1008 of 1008 hours, 236.3 mm). `make eccc-import FROM=… TO=…` caches them with their fetch windows in the gitignored `data/rain/` for `-scenario eccc` (ADR 0008).
 - Own rain gauges are primary; ECCC is fallback (hours no gauge covers) and cross-check.
+- **County of Middlesex open data** (real-geography sites, ADR 0008). Verified 2026-09-13:
+  - Address points: `https://utility.arcgis.com/usrsvcs/servers/f4dd79bdd35a456c87c0c20668138c05/rest/services/MiddlesexCounty/Base_Layers/MapServer/1` (ArcGIS MapServer point layer "Address", native EPSG:26917, maxRecordCount 2000, pagination and orderBy supported). Fields used: `OBJECTID_1`, `GlobalID`, `MUNNUMBER`, `STREET_UNI`, `FULLADDRES`, `FULLSTREET`, `MUNCODE` (`MIDC` = Middlesex Centre). Query per street: `where=FULLSTREET='…' AND MUNCODE='MIDC'`, `outSR=4326`, `orderByFields=OBJECTID_1`, paged with `resultOffset`/`resultRecordCount` while `exceededTransferLimit` is true. Townhouse unit points carry a blank `MUNNUMBER`, the unit in `STREET_UNI` and the civic number only in `FULLADDRES`; the civic point of a numbered block with units is dropped (Maplewood Lane: 28 points, 27 homes).
+  - Road centrelines (Single Line Road Network): `https://utility.arcgis.com/usrsvcs/servers/7d7b31fb8cf144939edc0a4436706dfe/rest/services/MiddlesexCounty/SLRN/MapServer/0` (polyline, EPSG:26917). Query: `where=FULLNAME='…' AND (MUNL='MIDC' OR MUNR='MIDC')`; fields `FULLNAME`, `LFADD`/`LTADD`/`RFADD`/`RTADD`, `CLASS`, `SUBDIVISIO`, `PROPOSED` (non-zero pieces dropped), `MUNL`/`MUNR`. The road network spells Arrowwood Path `ARROWWOODPATH`. Every street probed chains into a single centreline.
+  - Timberwalk is subdivision plan `39T-MC0401` (Arrowwood Path 31, Mayapple Crescent 48, Mossy Wood Walk 8, Songbird Lane 3, Timberwalk Trail 73, Violet Court 22 addresses) plus `39T-MC1901` (Timberwalk Close 5, and the southern part of Timberwalk Trail). Nearby, cached: Bowman Drive 102, Basil Crescent 57, Stone Field Lane 43 (39T-MC1401); Woodlily Lane 45, Meadowsweet Crescent 34, Periwinkle Drive 26, Red Clover Court 21; Ashwood Crescent 37, Maplewood Lane 28, Stone Field Gate 23, Havenwood Lane 11, Havenwood Street 11 (39T-MC0601/0602).
+  - Query errors come back as HTTP 200 with `{"error":{"code":…}}`; the importer retries 429, 5xx, transport and decode failures, and fails on the rest.
+  - Licence unconfirmed (§14); attribution "Contains information from the County of Middlesex Open Data portal". Raw pages, snapshots and outlines stay in the gitignored `data/`.
 - **Alert email: Resend** over SMTP (decided 2026-09-12): `smtp.resend.com`, port 465 (implicit TLS), user `resend`, the Resend API key as `SMTP_PASSWORD`, `SMTP_FROM` on a Resend-verified domain (`onboarding@resend.dev` only delivers to the account owner). Any SMTP provider works through the same `SMTP_*` variables; an empty `SMTP_HOST` logs instead of sending. Configuration lives only in the gitignored `deploy/compose/.env`; `make alerts-testmail` checks delivery. No Resend idempotency header (a retry's fresh Date header would be a conflicting payload).
 - **Owner sign-in: Clerk** (decided 2026-09-12, ADR 0006): the dashboard uses `@clerk/react` with the publishable key in `web/.env.local`; the api-gateway verifies Clerk session JWTs against the issuer's public JWKS (`CLERK_ISSUER`, `CLERK_JWKS_URL`, `CLERK_AUTHORIZED_PARTIES`) and needs no Clerk secret. `https://dev.ecoworks.ca:3034` must be an allowed origin in the Clerk dashboard.
 
@@ -345,4 +357,7 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - [ ] Per-owner alert email needs a decryption scheme for `homes.owner_contact_encrypted` (and auth); Phase 3 emails a single operator address.
 - [x] Phase 4 acceptance tolerance for response lag: ±10 % is below what 15-min heartbeats, 0.2 mm tips and a 5-min gauge wake can resolve for homes that respond within ~60 min (truth lags 11–30 min need 1–3 min accuracy; measured median error 3–5 min, worst ~13 min, from the crossing localisation and the onset alike). The e2e currently accepts ±10 % or ±15 min, whichever is larger, plus a 5-min median. Accept that, or change the firmware cadence (e.g. heartbeats every 5 min in storm mode: in-memory evidence 44–47/60 homes within ±10 % with the true onset), or restate the criterion? (Recession meets ±10 % for every home.) **Decided 2026-09-12 by owner: approved as built** — recession strict ±10 % for every home; lag ±10 % or ±15 min (one heartbeat interval), whichever is larger, with median error ≤ 5 min.
 - [x] Storm `volume_l` is Σ §9 estimated volumes (pit area × level drop), which leaves out inflow during a pump run; for homes whose inflow nears pump capacity it understates the storm inflow up to ~2.6× (cycle counts match truth exactly). Keep §9, or estimate pumped volume as pump rate (learned from dry-weather runs) × run time? **Decided 2026-09-12 by owner: add a pump-rate estimate** — `volume_l` stays the §9 floor; `inflow_est_l` (calibrated pump rate × run time) and `pump_rate_lps` are stored beside it (migration 0006, §10), with `pump_rate_source` (`dry_weather` now, `bucket_test` when measured). Exposure through query.proto is the main session's to add.
+- [x] Real-geography site street set: simulate **the 7 Timberwalk streets** (plan 39T-MC0401 plus Timberwalk Close: 190 addresses) by default; cache the northern streets now as the larger sites `timberwalk-plus-basil-bowman`, `timberwalk-plus-plant-streets` and `timberwalk-nearby` (`internal/site/sites/`). **Decided 2026-09-13 by the owner.**
+- [ ] County of Middlesex data licence: the portal item has no licence text and the hub's "Terms of Use" label is unlinked. Confirm redistribution, derived maps and attribution wording with the County before committing any snapshot or segment outline, or publishing a map built from them (ADR 0008).
+- [ ] Segment kinds on real streets are illustrative (Timberwalk streets `wooded`, the rest `standard`). Should they come from something measured (tree cover, grading, distance to the stormwater pond) before any public comparison between streets?
 - [ ] Bucket test (research report `docs/research/pump-flow-bucket-test.md`, PR #10): pouring a bucket and timing the pump does not by itself measure flow rate; a measured pour mainly calibrates the pit's effective area. Should a bucket test calibrate `homes.pit_area_m2` (keeping the learned dry-weather drawdown for `pump_rate_lps`) instead of recording an overriding `pump_rate_source = bucket_test` rate as migration 0006 reserves? The report's other proposals (P2–P9: §4 ultrasonic sensor notes, §5 payload definitions and calibration records, §9 `bucket_tests` table, §10 area/drain-back/degradation rules, firmware calibration mode, dashboard wizard, simulator pump curves, further §14 questions) also await decisions.

@@ -181,15 +181,38 @@ func (r rngReader) Read(b []byte) (int, error) {
 
 var homeNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("https://github.com/smhunt/sumpnet/sim"))
 
-func newHome(index int, seg *SegmentParams, scn *Scenario, seed uint64, nSteps int) *home {
-	r := rand.New(rand.NewPCG(seed, uint64(index)+1)) //nolint:gosec // deterministic simulation, not security
+// homeIdentity is what distinguishes one home's identifiers and random stream.
+type homeIdentity struct {
+	homeID, devEUI, devAddr string
+	stream                  uint64
+}
+
+// syntheticIdentity is the identity of home index in the synthetic
+// neighbourhood: ids from (seed, index), stream index+1.
+func syntheticIdentity(index int, seed uint64) homeIdentity {
+	return homeIdentity{
+		homeID:  uuid.NewSHA1(homeNamespace, []byte(fmt.Sprintf("home:%d:%d", seed, index))).String(),
+		devEUI:  fmt.Sprintf("70b3d57ed0%06x", index),
+		devAddr: fmt.Sprintf("01a3b%03x", index),
+		stream:  uint64(index) + 1,
+	}
+}
+
+// siteIdentity is the identity a Site assigns (derived from the address outside
+// this package; see SiteHome).
+func siteIdentity(h SiteHome) homeIdentity {
+	return homeIdentity{homeID: h.HomeID, devEUI: h.DevEUI, devAddr: h.DevAddr, stream: h.Stream}
+}
+
+func newHome(index int, id homeIdentity, seg *SegmentParams, scn *Scenario, seed uint64, nSteps int) *home {
+	r := rand.New(rand.NewPCG(seed, id.stream)) //nolint:gosec // deterministic simulation, not security
 	unif := func(lo, hi float64) float64 { return lo + (hi-lo)*r.Float64() }
 
 	p := HomeParams{
 		Index:     index,
-		HomeID:    uuid.NewSHA1(homeNamespace, []byte(fmt.Sprintf("home:%d:%d", seed, index))).String(),
-		DevEUI:    fmt.Sprintf("70b3d57ed0%06x", index),
-		DevAddr:   fmt.Sprintf("01a3b%03x", index),
+		HomeID:    id.homeID,
+		DevEUI:    id.devEUI,
+		DevAddr:   id.devAddr,
 		SegmentID: seg.ID,
 	}
 	// About one in six pits is a 24" basin.
