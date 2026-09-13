@@ -58,8 +58,17 @@ func TestEstimateBaseflow(t *testing.T) {
 	sorted.Sort()
 
 	bf, ok := EstimateBaseflow(sorted.Cycles, nil, at(0), at(80*time.Hour))
-	if !ok || !near(bf.CPD, 6, 1e-9) || bf.DropMM != 150 {
+	if !ok || !near(bf.CPD, 6, 1e-9) || bf.DropMM != 150 || !near(bf.PumpMMPerS, 7.5, 1e-9) {
 		t.Fatalf("baseflow = %+v %v", bf, ok)
+	}
+	if lps, calibrated := bf.PumpRateLPS(0.16); !calibrated || !near(lps, 1.2, 1e-9) {
+		t.Errorf("pump rate = %v %v, want 0.16 m² × 150 mm ÷ 20 s = 1.2 L/s", lps, calibrated)
+	}
+	if _, calibrated := bf.PumpRateLPS(0); calibrated {
+		t.Error("no pit area, no pump rate")
+	}
+	if _, calibrated := (Baseflow{CPD: 6}).PumpRateLPS(0.16); calibrated {
+		t.Error("no calibration, no pump rate")
 	}
 	// 20 cycles → 19 intervals; the blip resets the chain, so 28 h → 32 h is
 	// lost; the backup run is skipped without breaking it.
@@ -206,6 +215,11 @@ func TestAnalyseHomeStorm(t *testing.T) {
 	if h.Cycles != cycles || cycles < 20 || !near(h.VolumeL, float64(cycles)*0.16*pitDrop, float64(cycles)*0.16*2) || !h.HasSamples {
 		t.Errorf("cycles %d (want %d), volume %.0f L", h.Cycles, cycles, h.VolumeL)
 	}
+	// The ideal pit reports 20 s runs for a 150 mm drop: 1.2 L/s, and the
+	// estimate equals the floor because no water flows in during its runs.
+	if !h.HasPumpRate || h.PumpRateSource != PumpRateDryWeather || !near(h.PumpRateLPS, 0.16*pitDrop/20, 0.02) || !near(h.InflowEstL, h.VolumeL, 0.02*h.VolumeL) {
+		t.Errorf("pump %.3f L/s (%v), inflow est %.0f L, floor %.0f L", h.PumpRateLPS, h.HasPumpRate, h.InflowEstL, h.VolumeL)
+	}
 
 	// Data that stop at the peak: lag known, recession not yet; volume up to the data.
 	h2 := AnalyseHomeStorm(p.obs, 0.16, s, rain, time.Time{}, T1, DefaultResponseParams())
@@ -219,7 +233,47 @@ func TestAnalyseHomeStorm(t *testing.T) {
 	}
 	// No dry-weather history: no baseflow, so no lag or recession, but cycles and volume still count.
 	h4 := AnalyseHomeStorm(p.obs, 0, s, nil, time.Time{}, at(5*24*time.Hour), ResponseParams{Step: time.Minute, LagWindow: 20 * time.Minute, RecessionWindow: 2 * time.Hour, BaseflowLookback: time.Minute, MaxRecession: 24 * time.Hour})
-	if h4.HasBaseflow || h4.HasLag || h4.HasRecession || h4.Cycles == 0 || h4.VolumeL != 0 {
+	if h4.HasBaseflow || h4.HasLag || h4.HasRecession || h4.HasPumpRate || h4.Cycles == 0 || h4.VolumeL != 0 || h4.InflowEstL != 0 {
 		t.Errorf("no history: %+v", h4)
+	}
+}
+
+func TestPumpedVolume(t *testing.T) {
+	c := func(at time.Duration, runS, dropMM int32, pump string) Cycle {
+		return Cycle{StartedAt: t0.Add(at), RunS: runS, LevelStartMM: 400, LevelEndMM: 400 + dropMM, Pump: pump}
+	}
+	o := HomeObs{
+		Cycles: []Cycle{
+			c(-time.Minute, 20, 150, "primary"),   // before the window
+			c(0, 20, 150, "primary"),              // dry-weather-like run: rate × run = floor
+			c(10*time.Minute, 60, 150, "primary"), // storm run: 60 s at 1.2 L/s = 72 L, floor 24 L
+			c(20*time.Minute, 5, 150, "primary"),  // faster than calibrated: the floor wins
+			c(30*time.Minute, 90, 150, "backup"),  // backup runs are not calibrated: floor
+			c(40*time.Minute, 30, -10, "primary"), // level rose: floor 0, rate × run 36 L
+			c(time.Hour, 20, 150, "primary"),      // at the window end: excluded
+		},
+		Summaries: []Summary{
+			{WindowEnd: t0.Add(50 * time.Minute), WindowS: 900, Count: 10, TotalRunS: 500}, // 600 L est, floor 240 L
+			{WindowEnd: t0.Add(55 * time.Minute), WindowS: 900, Count: 10, TotalRunS: 100}, // est 120 < floor 240
+		},
+	}
+	cases := []struct {
+		name       string
+		area, drop float64
+		pump       float64
+		cycles     int
+		floor, est float64
+	}{
+		{"calibrated", 0.16, 150, 1.2, 25, 24 + 24 + 24 + 24 + 0 + 240 + 240, 24 + 72 + 24 + 24 + 36 + 600 + 240},
+		{"no pump rate", 0.16, 150, 0, 25, 24 + 24 + 24 + 24 + 0 + 240 + 240, 0},
+		{"no pit area", 0, 150, 1.2, 25, 0, 24 + 72 + 6 + 0 + 36 + 600 + 120},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := PumpedVolume(o, t0, t0.Add(time.Hour), tc.area, tc.drop, tc.pump)
+			if p.Cycles != tc.cycles || !near(p.FloorL, tc.floor, 1e-9) || !near(p.EstL, tc.est, 1e-9) {
+				t.Errorf("pumped = %+v, want cycles %d floor %.1f est %.1f", p, tc.cycles, tc.floor, tc.est)
+			}
+		})
 	}
 }

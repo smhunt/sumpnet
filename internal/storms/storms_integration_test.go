@@ -170,6 +170,9 @@ func TestStormAnalyticsFromSimulatedStorm(t *testing.T) {
 		if p := truth.Homes[ht.HomeIndex]; math.Abs(hm.BaseflowCpd.Float64-p.BaseflowCPD) > 0.03*p.BaseflowCPD {
 			t.Errorf("home %d baseflow %.3f, truth %.3f", ht.HomeIndex, hm.BaseflowCpd.Float64, p.BaseflowCPD)
 		}
+		if p := truth.Homes[ht.HomeIndex]; !hm.PumpRateLps.Valid || math.Abs(hm.PumpRateLps.Float64-p.PumpLPS) > 0.05*p.PumpLPS || !hm.InflowEstL.Valid || hm.InflowEstL.Float64 < hm.VolumeL || hm.PumpRateSource.String != hydrology.PumpRateDryWeather {
+			t.Errorf("home %d pump rate %v (truth %.3f L/s), inflow est %v, floor %.0f L", ht.HomeIndex, hm.PumpRateLps, p.PumpLPS, hm.InflowEstL, hm.VolumeL)
+		}
 	}
 	wctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	n, err := conn.Conn().WaitForNotification(wctx)

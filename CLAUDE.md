@@ -82,6 +82,7 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - §10 storm/baseflow/lag/recession live in `internal/hydrology` (pure). Acceptance compares `HomeStormTruth.lag_min` / `recession_min` (continuous truth); `lag_min_discrete` saturates below 24 cycles/day and is not a usable truth.
 - `sim.Config.RainGauges` defaults to 0 so existing stream hashes hold; the CLI (`-rain-gauges`) and `testpipeline.NewSim` use 2. Gauge events have `HomeIndex = -1` and `Kind = "rain"`.
 - OUTAGE_RISK rain term: rain recorded in the 6 h before the reading; rainfall data that do not reach within 30 min of it count as rain (a dead feed never hides the alert).
+- `home_storm_metrics.volume_l` is the §9 pit-drop floor; `inflow_est_l` = calibrated pump rate (`pump_rate_lps`, pit area × median dry-weather drop ÷ run time) × run time; `pump_rate_source` is `dry_weather` (learned) or, later, `bucket_test` (measured, takes precedence); all three NULL without a pit area or calibration (migration 0006). storm-analytics never edits `query.sql` / `query.proto`.
 
 ## Privacy invariants (ADR 0005)
 

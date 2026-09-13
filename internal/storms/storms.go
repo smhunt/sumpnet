@@ -407,14 +407,17 @@ func (a *Analyzer) recomputeHome(ctx context.Context, q *sqlcgen.Queries, si sto
 	}
 	row := sqlcgen.UpsertHomeStormMetricsParams{
 		StormID: si.id, HomeID: d.home,
-		LagMin:       optFloat(h.Lag.Minutes(), h.HasLag, 1),
-		RecessionMin: optFloat(h.Recession.Minutes(), h.HasRecession, 1),
-		VolumeL:      round(h.VolumeL, 1),
-		Cycles:       int32(min(h.Cycles, math.MaxInt32)), //nolint:gosec // clamped
-		BaseflowCpd:  optFloat(h.Baseflow.CPD, h.HasBaseflow, 3),
+		LagMin:         optFloat(h.Lag.Minutes(), h.HasLag, 1),
+		RecessionMin:   optFloat(h.Recession.Minutes(), h.HasRecession, 1),
+		VolumeL:        round(h.VolumeL, 1),
+		Cycles:         int32(min(h.Cycles, math.MaxInt32)), //nolint:gosec // clamped
+		BaseflowCpd:    optFloat(h.Baseflow.CPD, h.HasBaseflow, 3),
+		InflowEstL:     optFloat(h.InflowEstL, h.HasPumpRate, 1),
+		PumpRateLps:    optFloat(h.PumpRateLPS, h.HasPumpRate, 4),
+		PumpRateSource: pgtype.Text{String: h.PumpRateSource, Valid: h.HasPumpRate},
 	}
 	if had && old.LagMin == row.LagMin && old.RecessionMin == row.RecessionMin && old.VolumeL == row.VolumeL &&
-		old.Cycles == row.Cycles && old.BaseflowCpd == row.BaseflowCpd {
+		old.Cycles == row.Cycles && old.BaseflowCpd == row.BaseflowCpd && old.InflowEstL == row.InflowEstL && old.PumpRateLps == row.PumpRateLps && old.PumpRateSource == row.PumpRateSource {
 		a.m.HomeMetrics.WithLabelValues("unchanged").Inc()
 		return 0, nil
 	}
@@ -443,7 +446,7 @@ func (a *Analyzer) loadObs(ctx context.Context, q *sqlcgen.Queries, dev string, 
 		return o, fmt.Errorf("storms: roll-ups of %s: %w", dev, err)
 	}
 	for _, sm := range summaries {
-		o.Summaries = append(o.Summaries, hydrology.Summary{WindowEnd: sm.WindowEnd, WindowS: sm.WindowS, Count: sm.CycleCount})
+		o.Summaries = append(o.Summaries, hydrology.Summary{WindowEnd: sm.WindowEnd, WindowS: sm.WindowS, Count: sm.CycleCount, TotalRunS: sm.TotalRunS})
 	}
 	levels, err := q.ListLevelsForDevice(ctx, sqlcgen.ListLevelsForDeviceParams{DeviceID: dev, FromTs: near, ToTs: end})
 	if err != nil {

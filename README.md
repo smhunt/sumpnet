@@ -86,7 +86,9 @@ computes each home's response — lag, recession, volume, cycles and the baseflo
 against — from a water balance of pit levels and pump cycles, recomputing from the database whenever
 rain or telemetry change, so replays and late data converge ([ADR 0007](docs/adr/0007-storm-analytics.md)).
 The results are checked against the simulator's ground truth in `internal/e2e/phase4_integration_test.go`:
-recession within ±10 % for every home, lag within ±10 % or one 15-minute heartbeat interval.
+recession within ±10 % for every home, lag within ±10 % or one 15-minute heartbeat interval (tolerance
+approved by the owner), and storm inflow — the pump rate calibrated from dry-weather cycles × run time —
+within a few percent; the pit-drop volume is kept as a conservative floor.
 
 ```bash
 # Replay a 50 mm storm with a 3-day dry lead (baseflow history) and a 3-day tail (recession):
@@ -135,7 +137,7 @@ against known answers.
 | 1 — Contracts + simulator | done |
 | 2 — Ingest path | done |
 | 3 — Cycle detection + alerts | done |
-| 4 — Weather + storm analytics | done (lag tolerance ±10 % or 15 min approved 2026-09-12; pump-rate inflow estimate in a follow-up PR) |
+| 4 — Weather + storm analytics | done (lag tolerance ±10 % or 15 min approved 2026-09-12; storm inflow from the calibrated pump rate) |
 | 5 — API gateway + dashboard | built; acceptance test passing, live storm replay check pending |
 | 6 — MCP server | planned |
 | 7 — Firmware + first real nodes | planned |
