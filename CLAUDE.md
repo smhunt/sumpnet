@@ -68,6 +68,10 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - §10 rules live in `internal/hydrology` (pure); storm-mode summaries carry the short-cycling test in aggregate (`SummaryShortCycling`).
 - Email: real provider SMTP from `.env` (`SMTP_HOST/PORT/USER/PASSWORD/FROM`, `ALERTS_TO`); empty `SMTP_HOST` = log only. The provider is **Resend** over SMTP (`smtp.resend.com`, port 465, user `resend`, password = Resend API key, `SMTP_FROM` on a Resend-verified domain). `SMTP_PASSWORD` is an API key — never commit `.env`, never paste it into chat. `make alerts-testmail` sends one delivery check. Tests use Mailpit via testcontainers, never real mail.
 
+## Privacy invariants (ADR 0005)
+
+- Per-home data is served only on owner-scoped paths: the caller's Clerk subject must be linked in `home_owners`. Public views aggregate to segments through `internal/privacy` only (`MinHomes = 3`; suppressed aggregates zero every number, including live cycle rate and alert count). Unlinked devices never count as reporting homes.
+
 ## Architecture
 
 ```

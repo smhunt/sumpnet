@@ -213,7 +213,7 @@ func SeedHomes(t *testing.T, st *store.Store, e *sim.Engine) {
 	ctx := context.Background()
 	q := st.Queries()
 	for _, s := range e.Segments() {
-		if err := q.UpsertSegment(ctx, sqlcgen.UpsertSegmentParams{ID: s.ID, Name: s.Name}); err != nil {
+		if err := q.UpsertSegment(ctx, sqlcgen.UpsertSegmentParams{ID: s.ID, Name: s.Name, Kind: s.Kind.String()}); err != nil {
 			t.Fatal(err)
 		}
 	}

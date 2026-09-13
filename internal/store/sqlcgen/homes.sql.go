@@ -54,16 +54,18 @@ func (q *Queries) UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, e
 }
 
 const upsertSegment = `-- name: UpsertSegment :exec
-INSERT INTO segments (id, name) VALUES ($1, $2)
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+INSERT INTO segments (id, name, kind) VALUES ($1, $2, coalesce(nullif($3::text, ''), 'standard'))
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind
 `
 
 type UpsertSegmentParams struct {
 	ID   string
 	Name string
+	Kind string
 }
 
+// An empty kind means 'standard' so callers that predate segments.kind keep working.
 func (q *Queries) UpsertSegment(ctx context.Context, arg UpsertSegmentParams) error {
-	_, err := q.db.Exec(ctx, upsertSegment, arg.ID, arg.Name)
+	_, err := q.db.Exec(ctx, upsertSegment, arg.ID, arg.Name, arg.Kind)
 	return err
 }

@@ -8,7 +8,7 @@ Short MADR-style records, numbered in the order the decisions were made.
 | [0002](0002-generated-code.md) | Commit generated protobuf code under `gen/go` | accepted |
 | [0003](0003-eventing.md) | Service-to-service eventing: Postgres LISTEN/NOTIFY | accepted |
 | [0004](0004-partitioning.md) | Time-series storage: native partitioning + pg_partman | accepted |
-| 0005 | Privacy thresholds: segment aggregation with k ≥ 3 | planned (Phase 4) |
+| [0005](0005-privacy-thresholds.md) | Privacy thresholds: segment aggregation with k ≥ 3 | accepted |
 
 ## Template
 

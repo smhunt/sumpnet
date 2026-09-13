@@ -69,6 +69,7 @@ type Querier interface {
 	TouchAlert(ctx context.Context, arg TouchAlertParams) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
 	UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, error)
+	// An empty kind means 'standard' so callers that predate segments.kind keep working.
 	UpsertSegment(ctx context.Context, arg UpsertSegmentParams) error
 }
 

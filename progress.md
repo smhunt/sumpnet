@@ -5,9 +5,24 @@ Phase: **0 — Scaffold** — DONE 2026-09-11 (all acceptance criteria met, CI r
 
 Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below; branch `phase-3/alerts`)
 
-Next phase: **4 — Weather + storm analytics**. Do not start until the Phase 3 PR is merged. Open inputs: rain-gauge fPort (§14), per-owner email (§14).
+Phases **4 — Weather + storm analytics** and **5 — API gateway + dashboard** run in parallel (owner's call, 2026-09-12) on branches `phase-4/weather` and `phase-5/gateway`, both forked from `contracts/phase-4-5`.
 
 ## Session log (newest first)
+
+### 2026-09-12 (Resend, PR #4 merge, Phase 4/5 contracts)
+- Resend plugin (skills) installed. Alert email goes through Resend SMTP
+  (`smtp.resend.com:465`, user `resend`, API key as password, verified-domain
+  sender) — configuration only in `.env`; `alerts testmail` /
+  `make alerts-testmail` sends one delivery check. No Resend idempotency
+  header (a retry's fresh Date header would be a conflicting payload).
+- PR #4 (Phase 3) merged.
+- §14 decisions with owner: rain gauge = fPort 5, 11 B, cumulative tip
+  counter; owner auth = Clerk.
+- Shared contract for the parallel phases: migration 0004 (`segments.kind`,
+  `rainfall`, `storm_events`, `home_storm_metrics`, `home_owners`),
+  `internal/privacy` (k ≥ 3) + ADR 0005, §5 fPort 5 spec. Ownership: Phase 4
+  owns codec/sim/ingest/weather/storm-analytics and may add migration 0005;
+  Phase 5 owns api-gateway/web/query protos and may add migration 0006.
 
 ### 2026-09-11 (Phase 3, branch `phase-3/alerts`)
 - Decisions with owner: real SMTP via a transactional provider (creds in

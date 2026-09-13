@@ -150,6 +150,33 @@ type Home struct {
 	CreatedAt             time.Time
 }
 
+type HomeOwner struct {
+	AuthSubject string
+	HomeID      uuid.UUID
+	CreatedAt   time.Time
+}
+
+type HomeStormMetric struct {
+	StormID      uuid.UUID
+	HomeID       uuid.UUID
+	LagMin       pgtype.Float8
+	RecessionMin pgtype.Float8
+	VolumeL      float64
+	Cycles       int32
+	BaseflowCpd  pgtype.Float8
+	ComputedAt   time.Time
+}
+
+type Rainfall struct {
+	Source     string
+	StationID  string
+	Ts         time.Time
+	IntervalS  int32
+	Mm         float64
+	InsertedAt time.Time
+	UpdatedAt  time.Time
+}
+
 type Reading struct {
 	DeviceID        string
 	Ts              time.Time
@@ -176,6 +203,19 @@ type Segment struct {
 	Name      string
 	Geometry  []byte
 	CreatedAt time.Time
+	Kind      string
+}
+
+type StormEvent struct {
+	ID               uuid.UUID
+	StartedAt        time.Time
+	EndedAt          sql.NullTime
+	TotalRainMm      float64
+	PeakIntensityMmH float64
+	RainSource       string
+	Status           string
+	InsertedAt       time.Time
+	UpdatedAt        time.Time
 }
 
 type StormSummary struct {
