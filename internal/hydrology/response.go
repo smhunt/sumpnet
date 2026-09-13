@@ -54,6 +54,7 @@ type Summary struct {
 	WindowEnd time.Time
 	WindowS   int32
 	Count     int32
+	TotalRunS int32 // pump run time of the rolled-up cycles
 }
 
 // WindowStart is the start of the roll-up window.
@@ -81,6 +82,27 @@ type Baseflow struct {
 	CPD     float64 // median dry-weather cycles/day
 	DropMM  float64 // median level drop of the same cycles: the size of one cycle
 	Samples int     // dry-weather intervals the median was taken over
+	// PumpMMPerS is the median level drop per second of pump run over the
+	// same dry-weather cycles: the primary pump's rate in mm of pit depth.
+	// Inflow during a dry-weather run is negligible (well under 1 % of the
+	// pump rate), so drop ÷ run time is the pump's own rate.
+	PumpMMPerS float64
+}
+
+// Pump rate calibration sources (home_storm_metrics.pump_rate_source).
+const (
+	PumpRateDryWeather = "dry_weather" // learned from dry-weather cycles
+	PumpRateBucketTest = "bucket_test" // measured: a known volume poured into the pit, pump timed
+)
+
+// PumpRateLPS is the calibrated primary pump rate in L/s: pit area × the
+// dry-weather drop per second of run (m² × mm = L). ok is false without a
+// pit area or a calibration.
+func (b Baseflow) PumpRateLPS(pitAreaM2 float64) (float64, bool) {
+	if pitAreaM2 <= 0 || b.PumpMMPerS <= 0 {
+		return 0, false
+	}
+	return pitAreaM2 * b.PumpMMPerS, true
 }
 
 // EstimateBaseflow applies §10 baseflow to the primary-pump cycles started
@@ -92,7 +114,7 @@ type Baseflow struct {
 // of data. ok is false with fewer than BaseflowMinSamples intervals.
 func EstimateBaseflow(cycles []Cycle, rain []RainInterval, from, to time.Time) (Baseflow, bool) {
 	var prev *Cycle
-	var rates, drops []float64
+	var rates, drops, pumps []float64
 	for i := range cycles {
 		c := cycles[i]
 		if c.Pump != "" && c.Pump != "primary" {
@@ -107,6 +129,9 @@ func EstimateBaseflow(cycles []Cycle, rain []RainInterval, from, to time.Time) (
 			if gap > 0 && RainBetween(rain, prev.StartedAt.Add(-BaseflowDryFor), c.StartedAt) <= rainEpsilonMM {
 				rates = append(rates, 86400/gap.Seconds())
 				drops = append(drops, float64(prev.DropMM()))
+				if prev.RunS > 0 {
+					pumps = append(pumps, float64(prev.DropMM())/float64(prev.RunS))
+				}
 			}
 		}
 		prev = &cycles[i]
@@ -114,7 +139,58 @@ func EstimateBaseflow(cycles []Cycle, rain []RainInterval, from, to time.Time) (
 	if len(rates) < BaseflowMinSamples {
 		return Baseflow{Samples: len(rates)}, false
 	}
-	return Baseflow{CPD: median(rates), DropMM: median(drops), Samples: len(rates)}, true
+	bf := Baseflow{CPD: median(rates), DropMM: median(drops), Samples: len(rates)}
+	if len(pumps) > 0 {
+		bf.PumpMMPerS = median(pumps)
+	}
+	return bf, true
+}
+
+// Pumped is what a home's pumps moved in a window.
+type Pumped struct {
+	Cycles int // individual cycles plus rolled-up counts
+	// FloorL is §9's estimate: pit area × level drop per cycle (roll-ups:
+	// count × typical drop). It leaves out inflow during each run, so it is
+	// a floor on the water pumped.
+	FloorL float64
+	// EstL is the calibrated pump rate × run time (roll-ups: rate × their
+	// total run time), never below a cycle's floor; backup-pump runs, which
+	// dry weather never calibrates, count at their floor. 0 without a rate.
+	EstL float64
+}
+
+// PumpedVolume sums the cycles started and the roll-ups ended in [from, to).
+// dropMM is the typical cycle drop used for roll-ups' floor.
+func PumpedVolume(o HomeObs, from, to time.Time, pitAreaM2, dropMM, pumpLPS float64) Pumped {
+	in := func(t time.Time) bool { return !t.Before(from) && t.Before(to) }
+	var p Pumped
+	area := math.Max(0, pitAreaM2)
+	for _, c := range o.Cycles {
+		if !in(c.StartedAt) {
+			continue
+		}
+		p.Cycles++
+		floor := area * math.Max(0, float64(c.DropMM()))
+		p.FloorL += floor
+		est := floor
+		if pumpLPS > 0 && (c.Pump == "" || c.Pump == "primary") {
+			est = math.Max(floor, pumpLPS*float64(c.RunS))
+		}
+		p.EstL += est
+	}
+	for _, s := range o.Summaries {
+		if !in(s.WindowEnd) {
+			continue
+		}
+		p.Cycles += int(s.Count)
+		floor := area * float64(s.Count) * math.Max(0, dropMM)
+		p.FloorL += floor
+		p.EstL += math.Max(floor, math.Max(0, pumpLPS)*float64(s.TotalRunS))
+	}
+	if pumpLPS <= 0 {
+		p.EstL = 0
+	}
+	return p
 }
 
 // Rate is the inflow around At expressed in cycles per day of the home's
@@ -335,13 +411,18 @@ type HomeStorm struct {
 	HasLag       bool
 	Recession    time.Duration // rain end → rate back within 1.2× baseflow
 	HasRecession bool
-	// Cycles and VolumeL cover [storm onset, rain end + recession), or up to
-	// the end of the analysis while the home has not receded: individually
-	// reported cycles plus storm-mode roll-ups.
+	// Cycles, VolumeL and InflowEstL cover [storm onset, rain end +
+	// recession), or up to the end of the analysis while the home has not
+	// receded: individually reported cycles plus storm-mode roll-ups.
 	Cycles     int
-	VolumeL    float64
-	WindowEnd  time.Time
-	HasSamples bool // the home reported anything in the window
+	VolumeL    float64 // §9 pit-drop floor (Pumped.FloorL)
+	InflowEstL float64 // calibrated pump rate × run time (Pumped.EstL), when HasPumpRate
+	// PumpRateLPS is the primary pump rate calibrated from the baseflow cycles.
+	PumpRateLPS    float64
+	PumpRateSource string // PumpRateDryWeather when HasPumpRate
+	HasPumpRate    bool
+	WindowEnd      time.Time
+	HasSamples     bool // the home reported anything in the window
 }
 
 // AnalyseHomeStorm computes one home's response to storm s. rain is the
@@ -382,36 +463,32 @@ func AnalyseHomeStorm(o HomeObs, pitAreaM2 float64, s Storm, rain []RainInterval
 	}
 	in := func(t time.Time) bool { return !t.Before(s.Onset) && t.Before(h.WindowEnd) }
 	dropMM := h.Baseflow.DropMM
-	var drops []float64
-	for _, c := range o.Cycles {
-		if !in(c.StartedAt) {
-			continue
+	if !h.HasBaseflow {
+		var drops []float64
+		for _, c := range o.Cycles {
+			if in(c.StartedAt) && c.DropMM() > 0 {
+				drops = append(drops, float64(c.DropMM()))
+			}
 		}
-		h.Cycles++
-		h.HasSamples = true
-		if d := c.DropMM(); d > 0 {
-			h.VolumeL += pitAreaM2 * float64(d)
-			drops = append(drops, float64(d))
+		if len(drops) > 0 {
+			dropMM = median(drops)
 		}
 	}
-	if !h.HasBaseflow && len(drops) > 0 {
-		dropMM = median(drops)
-	}
-	for _, sm := range o.Summaries {
-		if !in(sm.WindowEnd) {
-			continue
+	if h.HasBaseflow {
+		h.PumpRateLPS, h.HasPumpRate = h.Baseflow.PumpRateLPS(pitAreaM2)
+		if h.HasPumpRate {
+			h.PumpRateSource = PumpRateDryWeather
 		}
-		h.Cycles += int(sm.Count)
-		h.HasSamples = true
-		h.VolumeL += pitAreaM2 * float64(sm.Count) * dropMM
 	}
+	pumped := PumpedVolume(o, s.Onset, h.WindowEnd, pitAreaM2, dropMM, h.PumpRateLPS)
+	h.Cycles, h.VolumeL, h.InflowEstL = pumped.Cycles, pumped.FloorL, pumped.EstL
+	h.HasSamples = pumped.Cycles > 0
 	for _, l := range o.Levels {
 		if in(l.At) {
 			h.HasSamples = true
 			break
 		}
 	}
-	h.VolumeL = math.Max(0, h.VolumeL)
 	return h
 }
 

@@ -157,14 +157,17 @@ type HomeOwner struct {
 }
 
 type HomeStormMetric struct {
-	StormID      uuid.UUID
-	HomeID       uuid.UUID
-	LagMin       pgtype.Float8
-	RecessionMin pgtype.Float8
-	VolumeL      float64
-	Cycles       int32
-	BaseflowCpd  pgtype.Float8
-	ComputedAt   time.Time
+	StormID        uuid.UUID
+	HomeID         uuid.UUID
+	LagMin         pgtype.Float8
+	RecessionMin   pgtype.Float8
+	VolumeL        float64
+	Cycles         int32
+	BaseflowCpd    pgtype.Float8
+	ComputedAt     time.Time
+	InflowEstL     pgtype.Float8
+	PumpRateLps    pgtype.Float8
+	PumpRateSource pgtype.Text
 }
 
 type RainGaugeUplink struct {

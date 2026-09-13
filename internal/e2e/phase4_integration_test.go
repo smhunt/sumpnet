@@ -48,9 +48,20 @@ import (
 //     5-min wake) see the rain onset minutes late. With truth lags of 11–30
 //     min for fast homes, ±10 % (1–3 min) is below that resolution. The
 //     median absolute lag error must stay within 5 min, and every lag and
-//     recession error is logged. See progress.md (Phase 4) for the evidence
-//     and the owner decision this rests on.
+//     recession error is logged. The owner approved this tolerance on
+//     2026-09-12 (prompt_plan.md §14; evidence in progress.md).
+//   - pump rate (pump_rate_lps) within 5 % of HomeParams.pump_l_per_s: run
+//     time is reported in whole seconds, so a ~20 s run is uncertain by 5 %
+//     (observed max +4.7 %, median ≈1 %);
+//   - storm inflow (inflow_est_l) within 8 % of the truth storm volume_l plus
+//     the baseflow inflow over the same truth window [onset, rain end +
+//     recession_min]: the pump-rate bound plus up to two cycles of pit
+//     storage at the window edges (≈3 % of the smallest storm; observed max
+//     2.2 %, median 0.7 %). The §9 pit-drop floor (volume_l) is logged beside
+//     it and must not exceed the estimate.
 const (
+	pumpRateTolPct = 5.0
+	inflowTolPct   = 8.0
 	phase4Scenario = "storm50-long"
 	phase4Seed     = 42
 	phase4Homes    = 16
@@ -207,8 +218,10 @@ func TestPhase4StormAcceptance(t *testing.T) {
 	if len(metrics) != phase4Homes {
 		t.Errorf("%d home_storm_metrics rows, want %d", len(metrics), phase4Homes)
 	}
-	var table strings.Builder
-	fmt.Fprintf(&table, "\n%4s %6s %6s %9s | %6s %6s %7s %6s | %6s %6s %7s | %6s %5s %7s %7s\n", "home", "base", "est", "delayMin", "lag", "est", "err", "err%", "rec", "est", "err%", "cycles", "truth", "vol_L", "truthL")
+	var table, vtable strings.Builder
+	fmt.Fprintf(&table, "\n%4s %6s %6s %9s | %6s %6s %7s %6s | %6s %6s %7s | %6s %5s\n", "home", "base", "est", "delayMin", "lag", "est", "err", "err%", "rec", "est", "err%", "cycles", "truth")
+	fmt.Fprintf(&vtable, "\n%4s | %6s %6s %6s | %8s %8s %8s %8s %7s | %8s %6s\n", "home", "pumpT", "pumpE", "err%", "stormL", "baseL", "truthL", "estL", "err%", "floorL", "floor%")
+	var inflowAbsPct []float64
 	var lagAbs []float64
 	lagStrict, lagN, recN := 0, 0, 0
 	for i, p := range s.homes {
@@ -249,8 +262,34 @@ func TestPhase4StormAcceptance(t *testing.T) {
 				}
 			}
 		}
-		fmt.Fprintf(&table, "%4d %6.2f %6.2f %9.1f | %6.0f %6.1f %+7.1f %+6.1f | %6.0f %6.1f %+7.1f | %6d %5d %7.0f %7.0f\n",
-			i, p.BaseflowCPD, m.BaseflowCpd.Float64, p.DelayMin, ht.LagMin, m.LagMin.Float64, lagErr, lagPct, ht.RecessionMin, m.RecessionMin.Float64, recPct, m.Cycles, ht.Cycles, m.VolumeL, ht.VolumeL)
+		fmt.Fprintf(&table, "%4d %6.2f %6.2f %9.1f | %6.0f %6.1f %+7.1f %+6.1f | %6.0f %6.1f %+7.1f | %6d %5d\n",
+			i, p.BaseflowCPD, m.BaseflowCpd.Float64, p.DelayMin, ht.LagMin, m.LagMin.Float64, lagErr, lagPct, ht.RecessionMin, m.RecessionMin.Float64, recPct, m.Cycles, ht.Cycles)
+
+		// Volume: the simulator's volume_l is the storm inflow alone over
+		// [onset, rain end + true recession]; pumping over that window also
+		// moves the baseflow inflow, which is known exactly from the truth
+		// parameters, so the estimate is compared with storm + baseflow.
+		pumpPct := 100 * (m.PumpRateLps.Float64 - p.PumpLPS) / p.PumpLPS
+		if !m.PumpRateLps.Valid || m.PumpRateSource.String != hydrology.PumpRateDryWeather || math.Abs(pumpPct) > pumpRateTolPct {
+			t.Errorf("home %d: pump rate %v L/s, truth %.3f (tolerance %.0f %%)", i, m.PumpRateLps, p.PumpLPS, pumpRateTolPct)
+		}
+		if ht.RecessionMin >= 0 && m.InflowEstL.Valid {
+			windowMin := ts.RainEnd.Add(time.Duration(ht.RecessionMin * float64(time.Minute))).Sub(ts.Onset).Minutes()
+			baseL := p.BaseflowCPD * p.CycleVolumeL() * windowMin / 1440
+			truthL := ht.VolumeL + baseL
+			estPct := 100 * (m.InflowEstL.Float64 - truthL) / truthL
+			inflowAbsPct = append(inflowAbsPct, math.Abs(estPct))
+			if math.Abs(estPct) > inflowTolPct {
+				t.Errorf("home %d: inflow estimate %.0f L, truth %.0f L (storm %.0f + baseflow %.0f) — error %+.1f %% > %.0f %%", i, m.InflowEstL.Float64, truthL, ht.VolumeL, baseL, estPct, inflowTolPct)
+			}
+			if m.InflowEstL.Float64 < m.VolumeL {
+				t.Errorf("home %d: inflow estimate %.0f L below the pit-drop floor %.0f L", i, m.InflowEstL.Float64, m.VolumeL)
+			}
+			fmt.Fprintf(&vtable, "%4d | %6.3f %6.3f %+6.1f | %8.0f %8.0f %8.0f %8.0f %+7.1f | %8.0f %+6.1f\n",
+				i, p.PumpLPS, m.PumpRateLps.Float64, pumpPct, ht.VolumeL, baseL, truthL, m.InflowEstL.Float64, estPct, m.VolumeL, 100*(m.VolumeL-truthL)/truthL)
+		} else {
+			t.Errorf("home %d: no inflow estimate (%v) or no truth recession", i, m.InflowEstL)
+		}
 		if m.Cycles <= 0 || m.VolumeL <= 0 {
 			t.Errorf("home %d: %d cycles, %.0f L", i, m.Cycles, m.VolumeL)
 		}
@@ -264,6 +303,11 @@ func TestPhase4StormAcceptance(t *testing.T) {
 		}
 	}
 	t.Logf("per-home results (truth = HomeStormTruth.lag_min / recession_min):%s", table.String())
+	t.Logf("per-home volume (pump rate vs HomeParams.pump_l_per_s; inflow_est_l vs truth storm volume_l + baseflow over the truth window):%s", vtable.String())
+	if len(inflowAbsPct) > 0 {
+		sort.Float64s(inflowAbsPct)
+		t.Logf("inflow estimate: median |error| %.1f %%, max %.1f %%", inflowAbsPct[len(inflowAbsPct)/2], inflowAbsPct[len(inflowAbsPct)-1])
+	}
 	t.Logf("lag: %d/%d homes within ±10 %%, median |error| %.1f min; recession: %d homes with defined truth, all checked at ±10 %%", lagStrict, lagN, med, recN)
 	if lagN == 0 || recN == 0 {
 		t.Fatalf("no home with defined truth (lag %d, recession %d)", lagN, recN)

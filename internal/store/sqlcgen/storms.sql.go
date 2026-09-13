@@ -139,7 +139,7 @@ func (q *Queries) ListCycleEventsForDevice(ctx context.Context, arg ListCycleEve
 }
 
 const listHomeMetricsForStorm = `-- name: ListHomeMetricsForStorm :many
-SELECT storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, computed_at FROM home_storm_metrics WHERE storm_id = $1 ORDER BY home_id
+SELECT storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, computed_at, inflow_est_l, pump_rate_lps, pump_rate_source FROM home_storm_metrics WHERE storm_id = $1 ORDER BY home_id
 `
 
 func (q *Queries) ListHomeMetricsForStorm(ctx context.Context, stormID uuid.UUID) ([]HomeStormMetric, error) {
@@ -160,6 +160,9 @@ func (q *Queries) ListHomeMetricsForStorm(ctx context.Context, stormID uuid.UUID
 			&i.Cycles,
 			&i.BaseflowCpd,
 			&i.ComputedAt,
+			&i.InflowEstL,
+			&i.PumpRateLps,
+			&i.PumpRateSource,
 		); err != nil {
 			return nil, err
 		}
@@ -292,7 +295,7 @@ func (q *Queries) ListStormEventsOverlapping(ctx context.Context, arg ListStormE
 }
 
 const listStormSummariesForDevice = `-- name: ListStormSummariesForDevice :many
-SELECT window_end, window_s, cycle_count FROM storm_summaries
+SELECT window_end, window_s, cycle_count, total_run_s FROM storm_summaries
 WHERE device_id = $1 AND window_end >= $2 AND window_end < $3
 ORDER BY window_end, f_cnt
 `
@@ -307,6 +310,7 @@ type ListStormSummariesForDeviceRow struct {
 	WindowEnd  time.Time
 	WindowS    int32
 	CycleCount int32
+	TotalRunS  int32
 }
 
 func (q *Queries) ListStormSummariesForDevice(ctx context.Context, arg ListStormSummariesForDeviceParams) ([]ListStormSummariesForDeviceRow, error) {
@@ -318,7 +322,12 @@ func (q *Queries) ListStormSummariesForDevice(ctx context.Context, arg ListStorm
 	items := []ListStormSummariesForDeviceRow{}
 	for rows.Next() {
 		var i ListStormSummariesForDeviceRow
-		if err := rows.Scan(&i.WindowEnd, &i.WindowS, &i.CycleCount); err != nil {
+		if err := rows.Scan(
+			&i.WindowEnd,
+			&i.WindowS,
+			&i.CycleCount,
+			&i.TotalRunS,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -412,21 +421,26 @@ func (q *Queries) UpdateStormEvent(ctx context.Context, arg UpdateStormEventPara
 }
 
 const upsertHomeStormMetrics = `-- name: UpsertHomeStormMetrics :exec
-INSERT INTO home_storm_metrics (storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, computed_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+INSERT INTO home_storm_metrics (storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, inflow_est_l, pump_rate_lps, pump_rate_source, computed_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
 ON CONFLICT (storm_id, home_id) DO UPDATE
   SET lag_min = EXCLUDED.lag_min, recession_min = EXCLUDED.recession_min, volume_l = EXCLUDED.volume_l,
-      cycles = EXCLUDED.cycles, baseflow_cpd = EXCLUDED.baseflow_cpd, computed_at = now()
+      cycles = EXCLUDED.cycles, baseflow_cpd = EXCLUDED.baseflow_cpd,
+      inflow_est_l = EXCLUDED.inflow_est_l, pump_rate_lps = EXCLUDED.pump_rate_lps,
+      pump_rate_source = EXCLUDED.pump_rate_source, computed_at = now()
 `
 
 type UpsertHomeStormMetricsParams struct {
-	StormID      uuid.UUID
-	HomeID       uuid.UUID
-	LagMin       pgtype.Float8
-	RecessionMin pgtype.Float8
-	VolumeL      float64
-	Cycles       int32
-	BaseflowCpd  pgtype.Float8
+	StormID        uuid.UUID
+	HomeID         uuid.UUID
+	LagMin         pgtype.Float8
+	RecessionMin   pgtype.Float8
+	VolumeL        float64
+	Cycles         int32
+	BaseflowCpd    pgtype.Float8
+	InflowEstL     pgtype.Float8
+	PumpRateLps    pgtype.Float8
+	PumpRateSource pgtype.Text
 }
 
 func (q *Queries) UpsertHomeStormMetrics(ctx context.Context, arg UpsertHomeStormMetricsParams) error {
@@ -438,6 +452,9 @@ func (q *Queries) UpsertHomeStormMetrics(ctx context.Context, arg UpsertHomeStor
 		arg.VolumeL,
 		arg.Cycles,
 		arg.BaseflowCpd,
+		arg.InflowEstL,
+		arg.PumpRateLps,
+		arg.PumpRateSource,
 	)
 	return err
 }

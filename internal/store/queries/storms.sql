@@ -39,11 +39,13 @@ DELETE FROM storm_events WHERE id = @id;
 SELECT * FROM home_storm_metrics WHERE storm_id = @storm_id ORDER BY home_id;
 
 -- name: UpsertHomeStormMetrics :exec
-INSERT INTO home_storm_metrics (storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, computed_at)
-VALUES (@storm_id, @home_id, @lag_min, @recession_min, @volume_l, @cycles, @baseflow_cpd, now())
+INSERT INTO home_storm_metrics (storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, inflow_est_l, pump_rate_lps, pump_rate_source, computed_at)
+VALUES (@storm_id, @home_id, @lag_min, @recession_min, @volume_l, @cycles, @baseflow_cpd, @inflow_est_l, @pump_rate_lps, @pump_rate_source, now())
 ON CONFLICT (storm_id, home_id) DO UPDATE
   SET lag_min = EXCLUDED.lag_min, recession_min = EXCLUDED.recession_min, volume_l = EXCLUDED.volume_l,
-      cycles = EXCLUDED.cycles, baseflow_cpd = EXCLUDED.baseflow_cpd, computed_at = now();
+      cycles = EXCLUDED.cycles, baseflow_cpd = EXCLUDED.baseflow_cpd,
+      inflow_est_l = EXCLUDED.inflow_est_l, pump_rate_lps = EXCLUDED.pump_rate_lps,
+      pump_rate_source = EXCLUDED.pump_rate_source, computed_at = now();
 
 -- name: DeleteHomeStormMetrics :exec
 DELETE FROM home_storm_metrics WHERE storm_id = @storm_id AND home_id = @home_id;
@@ -68,7 +70,7 @@ WHERE device_id = @device_id AND started_at >= @from_ts AND started_at < @to_ts
 ORDER BY started_at, f_cnt;
 
 -- name: ListStormSummariesForDevice :many
-SELECT window_end, window_s, cycle_count FROM storm_summaries
+SELECT window_end, window_s, cycle_count, total_run_s FROM storm_summaries
 WHERE device_id = @device_id AND window_end >= @from_ts AND window_end < @to_ts
 ORDER BY window_end, f_cnt;
 
