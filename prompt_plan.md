@@ -59,8 +59,8 @@ The same system as Mermaid diagrams (architecture, one uplink's data flow, data 
 
 | Item | Qty | Notes |
 |---|---|---|
-| LoRa node MCU: ESP32-S3 + SX1262 board (Heltec WiFi LoRa 32 V3 or LILYGO T3-S3) | 1 per house | LoRaWAN via RadioLib; Wi-Fi → MQTT is the bench/dev path (§5). Alt: RAK WisBlock RAK4631 (nRF52840) |
-| JSN-SR04T waterproof ultrasonic | 1 per house | Pit level (already proven on Photon node) |
+| Node MCU + radio: ESP32-S3 + SX1262 board (Heltec WiFi LoRa 32 V3 or LILYGO T3-S3) | 1 per house | One platform for both paths: LoRaWAN via RadioLib through ChirpStack for deployed nodes; Wi-Fi → MQTT (`sumpnet/v1/{dev_eui}/up`, §5) for dev and bench nodes. No Particle Photons (owner decision). RAK WisBlock RAK4631 (nRF52840) was considered and not chosen |
+| JSN-SR04T waterproof ultrasonic | 1 per house | Pit level. Ultrasonic, not optical: time-of-flight sensors are unreliable on water surfaces (`docs/research/pump-flow-bucket-test.md`) |
 | SCT-013 CT clamp + plug-through line splitter | 1–2 per house | Primary + backup pump current |
 | Float switch | 1 per house | Independent high-water alarm |
 | BME280 | 1 per house | Basement temp / RH |
