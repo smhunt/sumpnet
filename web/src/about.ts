@@ -23,6 +23,15 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
+    version: '0.4.0',
+    date: '2026-09-12',
+    changes: [
+      'Rainfall from two neighbourhood rain gauges, with Environment Canada hourly observations filling any gaps',
+      'Storms found automatically, with how fast each home responded, how long it took to settle and how much water was pumped',
+      'Power-outage risk alerts now take recent rain into account',
+    ],
+  },
+  {
     version: '0.3.0',
     date: '2026-09-11',
     changes: ['Pump-cycle detection (dry run, short cycling, continuous run) and alert email'],
@@ -36,6 +45,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: '0.1.0',
     date: '2026-09-11',
     changes: ['Sensor payload contracts and a deterministic 60-home neighbourhood simulator'],
+  },
+  {
+    version: '0.0.1',
+    date: '2026-09-11',
+    changes: ['Project scaffold: services, local stack and continuous integration'],
   },
 ]
 
@@ -54,6 +68,11 @@ export const HOW_IT_WORKS: HowItWorksStep[] = [
     title: 'Streets, not houses',
     description:
       'The public map only shows a street once at least three homes on it report. Below that it stays hidden, because a single pump can reveal who is home or whose basement floods.',
+  },
+  {
+    title: 'Rain gauges time every storm',
+    description:
+      'Two rain gauges at opposite ends of the neighbourhood record rainfall every few minutes, and Environment Canada’s hourly observations from London fill any gaps. A storm’s start and end come from that record.',
   },
   {
     title: 'Live, or storm by storm',
@@ -77,14 +96,27 @@ export interface RoadmapGroup {
 export const ROADMAP: RoadmapGroup[] = [
   {
     category: 'In progress',
-    items: [{ title: 'Rainfall from gauges and Environment Canada, with per-storm lag and recession', priority: 'high' }],
+    items: [
+      { title: 'Check a live storm replay on the map against the running stack', priority: 'high' },
+    ],
+  },
+  {
+    category: 'Proposed (owner decision pending)',
+    items: [
+      { title: 'Bucket test measures each pit’s real size, instead of setting the pump rate', priority: 'high' },
+      { title: 'Guided pump calibration in the dashboard', priority: 'medium' },
+      { title: 'Warnings for a failing check valve or a weakening pump', priority: 'medium' },
+      { title: 'Calibration mode and finer level sampling on the node', priority: 'low' },
+    ],
   },
   {
     category: 'Planned',
     items: [
+      { title: 'Ask Claude about storms through the MCP server', priority: 'high' },
       { title: 'First real sensors installed alongside the simulated homes', priority: 'high' },
       { title: 'Consent form and plain-language data policy for pilot homes', priority: 'high' },
-      { title: 'Ask Claude about storms through the MCP server', priority: 'medium' },
+      { title: 'Cloud deployment and published load-test results', priority: 'medium' },
+      { title: 'Show storm inflow from each pump’s own flow rate in the owner view', priority: 'medium' },
       { title: 'Surveyed street outlines agreed with Middlesex Centre', priority: 'medium' },
       { title: 'Alert email to each owner instead of one operator', priority: 'low' },
     ],

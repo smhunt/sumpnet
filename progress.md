@@ -1,17 +1,65 @@
 # progress
 
 ## Status
-Phase: **0 — Scaffold** — DONE 2026-09-11 (all acceptance criteria met, CI run 34634272184 green)
 
-Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below; branch `phase-3/alerts`)
+As of 2026-09-12. Session entries below, newest first, hold the details and acceptance evidence.
 
-Phases **4 — Weather + storm analytics** and **5 — API gateway + dashboard** run in parallel (owner's call, 2026-09-12) on branches `phase-4/weather` and `phase-5/gateway`, both forked from `contracts/phase-4-5`.
+| Phase | State |
+|---|---|
+| 0 — Scaffold | done 2026-09-11 (CI run 34634272184 green) |
+| 1 — Contracts + simulator | done 2026-09-11 (PR #2) |
+| 2 — Ingest path | done 2026-09-11 (PR #3) |
+| 3 — Cycle detection + alerts | done 2026-09-11; merged 2026-09-12 with Resend email (PR #4) |
+| 4 — Weather + storm analytics | done 2026-09-12 (PR #7); lag tolerance "±10 % or 15 min" (median ≤ 5 min) approved by the owner, recession strict ±10 %; pump-rate storm inflow estimate merged the same day (PR #9, migration 0006) |
+| 5 — API gateway + dashboard | built 2026-09-12 (PR #6); `TestPhase5Acceptance` green; "live storm replay visible on the map" not yet checked in a browser against `make up` |
+| 6 — MCP server | not started (`cmd/mcp-server` is a placeholder) |
+| 7 — Firmware + first real nodes | not started |
+| 8 — AWS + load test | not started |
+| 9 — Pilot | not started |
 
-Phase: **4 — Weather + storm analytics** — work items done 2026-09-12 on `phase-4/weather`; acceptance: recession ±10 % met for every home, lag ±10 % not reachable for fast homes (data resolution) — the e2e accepts ±10 % or 15 min with a 5-min median, approved by the owner 2026-09-12 (prompt_plan §14).
-
-Phase: **5 — API gateway + dashboard** — built on `phase-5/gateway` 2026-09-12: acceptance test passing (owner sees own home only, public views aggregate only); the "live storm replay visible on the map" check needs Phase 4 data and a browser check after merge.
+In flight: the Phase 5 live map check; docs refresh on `docs/refresh`. Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate. Not done yet: serving `inflow_est_l` through QueryService.
 
 ## Session log (newest first)
+
+### 2026-09-12 (integration: merges, owner decisions, JWKS fix, docs refresh)
+- **Resend email:** alert email goes through Resend SMTP (`smtp.resend.com:465`, user `resend`, API key
+  as password, verified-domain sender), configured only in `.env`; `make alerts-testmail` sends one
+  delivery check. Merged with Phase 3 in PR #4.
+- **Shared contracts (PR #5):** migration 0004 (`segments.kind`, `rainfall`, `storm_events`,
+  `home_storm_metrics`, `home_owners`), `internal/privacy` (k ≥ 3) with ADR 0005, and the §5 fPort 5
+  spec, so Phases 4 and 5 could be built in parallel (owner's call) on branches forked from
+  `contracts/phase-4-5`.
+- **Merges:** PR #4 (Phase 3), #5 (contracts), #6 (Phase 5) and #7 (Phase 4) merged on the owner's
+  instruction. Main was merged into `phase-4/weather` first; conflicts in README, ADR index, progress
+  and sqlcgen were resolved (sqlc regenerated). PR #8 (JWKS fix), PR #9 (pump-rate inflow estimate,
+  entry below) and PR #10 (bucket-test research report) followed the same evening.
+- **Owner decisions:** rain gauge uplink = fPort 5, 11 B, cumulative tip counter; owner auth = Clerk;
+  Phase 4 lag tolerance "±10 % or 15 min, whichever is larger, median ≤ 5 min" approved as built
+  (recession stays strict ±10 %); storm volume keeps the §9 pit-drop floor and adds a pump-rate inflow
+  estimate (follow-up branch `phase-4/pump-rate`, merged as PR #9).
+- **Fix (PR #8, merged):** after a Clerk signing-key rotation the api-gateway rejected tokens signed
+  with the new key until the hourly JWKS refresh. jwkset reuses the `RateLimitWaitMax` context for the
+  refresh request, and it was 1 ms; it is now 10 s (the HTTP timeout). New
+  `TestKeyRotationWithSlowJWKS`; `-race -count=30` green.
+- **Research (PR #10):** `docs/research/pump-flow-bucket-test.md`. Pouring a bucket into the pit and
+  timing the pump does not by itself measure flow rate; a measured pour mainly calibrates the pit's
+  effective area. The level sensor is ultrasonic (JSN-SR04T), not optical. Proposals P1–P9 (calibrate
+  area rather than override `pump_rate_lps`; hardware notes, payload definitions, data model, analytics,
+  firmware, dashboard wizard, simulator, §14 questions) await owner decisions.
+- **Live stack (main session):** `make up`, `make seed SEED=42 HOMES=60`,
+  `make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0` gave two closed storms: the simulated 50 mm
+  gauge storm with metrics for 60 homes, and a real 13.5 mm ECCC storm (2026-09-09) the poller fetched
+  live. The replay raised an OFFLINE alert per device (wall-clock sweep, `ALERTS_OFFLINE_AFTER: 1h` in
+  compose). storm-analytics did not backfill migration 0006's columns: rewinding only its `rainfall`
+  watermark was not enough, while stopping it and rewinding its `cycle_events` watermark filled 59 of
+  60 homes. Sim home 9 cycles ~500 times a day in dry weather, so it has no baseflow and its lag,
+  recession and pump rate stay NULL. With no Clerk values the gateway logs `auth:false`.
+- **In flight:** the Phase 5 browser check of a live storm replay against `make up`. Not done yet:
+  serving `inflow_est_l` through QueryService.
+- **Docs refresh (`docs/refresh`):** root README (Mermaid architecture, quickstart, ports, status,
+  load-test placeholder, "at 1M devices"), `docs/README.md` maps (system, data flow, ER model, layout,
+  API, privacy, deployment, operations runbook), CLAUDE.md commands/ports/invariants/operations, this Status table, CHANGELOG 0.4.0 and
+  the in-app About data, `prompt_plan.md` §3/§6/§7/§8/§11/§12/§14.
 
 ### 2026-09-12 (Phase 4 follow-up: owner decisions)
 - Owner: lag tolerance approved as built (§14 ticked; §12 Accept and ADR 0007 say so). PR #7 was merged by
@@ -27,10 +75,6 @@ Phase: **5 — API gateway + dashboard** — built on `phase-5/gateway` 2026-09-
   `inflow_est_l` vs truth storm `volume_l` + baseflow over the truth window −1.5 … +2.2 %
   (median |error| 0.7 %); the pit-drop floor was −8.0 … −62.4 %. Tolerances 5 % (whole-second run
   times on ~20 s runs) and 8 % (that plus two cycles of pit storage at the window edges).
-
-### 2026-09-12 (merge of Phases 4 and 5)
-- PRs #5 (contracts), #6 (Phase 5) and #7 (Phase 4) merged on the owner's instruction; conflicts in README, ADR index, progress and sqlcgen resolved (sqlc regenerated).
-- Owner decisions: Phase 4 lag tolerance "±10 % or 15 min" approved; storm volume keeps the §9 pit-drop floor and adds a pump-rate inflow estimate (follow-up branch `phase-4/pump-rate`). A research agent is studying the homeowner bucket test for measuring pump flow rate.
 
 ### 2026-09-12 (Phase 5, branch `phase-5/gateway`)
 - Merged the contracts fix `224bad8` (empty segment kind -> standard) before any DB work.
@@ -306,7 +350,7 @@ Phase: **5 — API gateway + dashboard** — built on `phase-5/gateway` 2026-09-
   0003 eventing), explicit `go_package` (no buf managed mode), rain-gauge fPort
   is a new §14 open question.
 
-## Phase 0 acceptance checklist
+#### Phase 0 acceptance
 - [x] `make lint && make test` clean
 - [x] `make up` exits 0; `make ps` shows postgres, redis, mosquitto, chirpstack and all 10 Go services healthy
 - [x] `curl -s localhost:3134/readyz` → 200; `/metrics` contains `sumpnet_build_info`
