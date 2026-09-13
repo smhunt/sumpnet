@@ -1,0 +1,287 @@
+{
+ "type": "FeatureCollection",
+ "name": "sumpnet-demo-segments",
+ "description": "ILLUSTRATIVE street-segment polygons for the sumpnet demo around Timberwalk, Ilderton, ON. Not surveyed, not real streets or lot lines; ids and kinds match the simulator's 8 segments.",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-01",
+    "name": "Segment 01 (standard)",
+    "kind": "standard"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.422385,
+       43.057078
+      ],
+      [
+       -81.419926,
+       43.057078
+      ],
+      [
+       -81.419926,
+       43.057617
+      ],
+      [
+       -81.422385,
+       43.057617
+      ],
+      [
+       -81.422385,
+       43.057078
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-02",
+    "name": "Segment 02 (wooded)",
+    "kind": "wooded"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.427303,
+       43.055731
+      ],
+      [
+       -81.424844,
+       43.055731
+      ],
+      [
+       -81.424844,
+       43.056269
+      ],
+      [
+       -81.427303,
+       43.056269
+      ],
+      [
+       -81.427303,
+       43.055731
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-03",
+    "name": "Segment 03 (near_pond)",
+    "kind": "near_pond"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.424844,
+       43.054383
+      ],
+      [
+       -81.422385,
+       43.054383
+      ],
+      [
+       -81.422385,
+       43.054922
+      ],
+      [
+       -81.424844,
+       43.054922
+      ],
+      [
+       -81.424844,
+       43.054383
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-04",
+    "name": "Segment 04 (standard)",
+    "kind": "standard"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.424844,
+       43.055731
+      ],
+      [
+       -81.422385,
+       43.055731
+      ],
+      [
+       -81.422385,
+       43.056269
+      ],
+      [
+       -81.424844,
+       43.056269
+      ],
+      [
+       -81.424844,
+       43.055731
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-05",
+    "name": "Segment 05 (high_ground)",
+    "kind": "high_ground"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.424844,
+       43.057078
+      ],
+      [
+       -81.422385,
+       43.057078
+      ],
+      [
+       -81.422385,
+       43.057617
+      ],
+      [
+       -81.424844,
+       43.057617
+      ],
+      [
+       -81.424844,
+       43.057078
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-06",
+    "name": "Segment 06 (standard)",
+    "kind": "standard"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.422385,
+       43.055731
+      ],
+      [
+       -81.419926,
+       43.055731
+      ],
+      [
+       -81.419926,
+       43.056269
+      ],
+      [
+       -81.422385,
+       43.056269
+      ],
+      [
+       -81.422385,
+       43.055731
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-07",
+    "name": "Segment 07 (wooded)",
+    "kind": "wooded"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.427303,
+       43.054383
+      ],
+      [
+       -81.424844,
+       43.054383
+      ],
+      [
+       -81.424844,
+       43.054922
+      ],
+      [
+       -81.427303,
+       43.054922
+      ],
+      [
+       -81.427303,
+       43.054383
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "seg-08",
+    "name": "Segment 08 (near_pond)",
+    "kind": "near_pond"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -81.422385,
+       43.054383
+      ],
+      [
+       -81.419926,
+       43.054383
+      ],
+      [
+       -81.419926,
+       43.054922
+      ],
+      [
+       -81.422385,
+       43.054922
+      ],
+      [
+       -81.422385,
+       43.054383
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

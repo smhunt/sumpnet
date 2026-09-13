@@ -17,17 +17,30 @@ type Querier interface {
 	CountAlarmEvents(ctx context.Context) (int64, error)
 	CountCycleEvents(ctx context.Context) (int64, error)
 	CountOpenAlertsByCode(ctx context.Context) ([]CountOpenAlertsByCodeRow, error)
+	CountOpenAlertsForHome(ctx context.Context, homeID uuid.NullUUID) (int64, error)
 	CountReadings(ctx context.Context) (int64, error)
 	CountStormSummaries(ctx context.Context) (int64, error)
 	// Rows and highest frame counter per device across every telemetry table;
 	// with contiguous counters rows == max_f_cnt + 1.
 	FCntStatsByDevice(ctx context.Context) ([]FCntStatsByDeviceRow, error)
+	// api-gateway (Phase 5) reads. The gateway is read-only: it never writes
+	// telemetry or alerts. Per-home rows are reachable only through an
+	// owner-scoped query (auth_subject = Clerk user id) or as input to an
+	// internal/privacy aggregate (ADR 0005). "Linked" homes are homes with at
+	// least one device whose home_id points at them; unlinked devices never count.
+	GatewayListSegments(ctx context.Context) ([]GatewayListSegmentsRow, error)
 	GetAlert(ctx context.Context, id uuid.UUID) (GetAlertRow, error)
 	GetCycleEvent(ctx context.Context, arg GetCycleEventParams) (CycleEvent, error)
 	GetDevice(ctx context.Context, devEui string) (Device, error)
 	GetDevicePitArea(ctx context.Context, devEui string) (GetDevicePitAreaRow, error)
+	// Baseflow storm-analytics used for the home's most recent storm.
+	GetHomeLatestBaseflow(ctx context.Context, homeID uuid.UUID) (float64, error)
+	// Newest heartbeat across the home's house devices.
+	GetHomeLatestReading(ctx context.Context, homeID uuid.NullUUID) (GetHomeLatestReadingRow, error)
 	// The alerts service is the single writer of this table.
 	GetOpenAlert(ctx context.Context, arg GetOpenAlertParams) (Alert, error)
+	GetOwnedHome(ctx context.Context, arg GetOwnedHomeParams) (Home, error)
+	GetStormEventByID(ctx context.Context, id uuid.UUID) (StormEvent, error)
 	GetWatermark(ctx context.Context, arg GetWatermarkParams) (time.Time, error)
 	InsertAlert(ctx context.Context, arg InsertAlertParams) (Alert, error)
 	InsertDetection(ctx context.Context, arg InsertDetectionParams) (int64, error)
@@ -38,18 +51,38 @@ type Querier interface {
 	LastNotifiedAt(ctx context.Context, arg LastNotifiedAtParams) (sql.NullTime, error)
 	LinkDevice(ctx context.Context, arg LinkDeviceParams) error
 	ListActiveAlerts(ctx context.Context, arg ListActiveAlertsParams) ([]ListActiveAlertsRow, error)
+	// Alert rows on homes that changed after @after; routed to owners only.
+	ListAlertsChangedSince(ctx context.Context, after time.Time) ([]ListAlertsChangedSinceRow, error)
 	ListAlertsForDevice(ctx context.Context, deviceID string) ([]Alert, error)
 	ListCyclesBefore(ctx context.Context, arg ListCyclesBeforeParams) ([]CycleEvent, error)
 	ListDetections(ctx context.Context, deviceID string) ([]Detection, error)
 	ListDevices(ctx context.Context) ([]Device, error)
+	ListHomeDevices(ctx context.Context, homeID uuid.NullUUID) ([]Device, error)
+	ListHomeStormMetrics(ctx context.Context, arg ListHomeStormMetricsParams) ([]ListHomeStormMetricsRow, error)
+	ListOwnedHomes(ctx context.Context, authSubject string) ([]Home, error)
+	ListOwnerActiveAlerts(ctx context.Context, arg ListOwnerActiveAlertsParams) ([]ListOwnerActiveAlertsRow, error)
+	ListOwnersOfHomes(ctx context.Context, homeIds []uuid.UUID) ([]ListOwnersOfHomesRow, error)
 	ListPendingRaiseNotifications(ctx context.Context, arg ListPendingRaiseNotificationsParams) ([]ListPendingRaiseNotificationsRow, error)
 	ListPendingResolveNotifications(ctx context.Context, arg ListPendingResolveNotificationsParams) ([]ListPendingResolveNotificationsRow, error)
 	ListReadingsBefore(ctx context.Context, arg ListReadingsBeforeParams) ([]Reading, error)
 	ListReadingsForDevice(ctx context.Context, arg ListReadingsForDeviceParams) ([]Reading, error)
+	// Open storms plus the most recent ones, for a WatchNeighbourhood snapshot.
+	ListSnapshotStormEvents(ctx context.Context, recent int32) ([]StormEvent, error)
 	// Devices silent longer than the given number of seconds (wall clock).
 	ListStaleDevices(ctx context.Context, afterSeconds float64) ([]ListStaleDevicesRow, error)
+	ListStormEventsChangedSince(ctx context.Context, after time.Time) ([]StormEvent, error)
+	// Newest first, keyset-paged on (started_at, id).
+	ListStormEventsPage(ctx context.Context, arg ListStormEventsPageParams) ([]StormEvent, error)
+	// Input to privacy.AggregateStorm only; never returned to a caller as rows.
+	ListStormHomeMetrics(ctx context.Context, stormID uuid.UUID) ([]ListStormHomeMetricsRow, error)
 	MarkRaiseNotification(ctx context.Context, arg MarkRaiseNotificationParams) error
 	MarkResolveNotification(ctx context.Context, arg MarkResolveNotificationParams) error
+	// The event-time "now" of the neighbourhood: the newest event from a linked
+	// house device, never later than the wall clock. Anchoring the live status
+	// window here makes a replay of a past storm animate like a live one.
+	NeighbourhoodClock(ctx context.Context) (time.Time, error)
+	OwnsAlert(ctx context.Context, arg OwnsAlertParams) (bool, error)
+	OwnsHome(ctx context.Context, arg OwnsHomeParams) (bool, error)
 	PollAlarmEvents(ctx context.Context, arg PollAlarmEventsParams) ([]AlarmEvent, error)
 	// Poll queries: rows newer than the watermark, never splitting an inserted_at
 	// group (all rows of one ingest batch share it), bounded to max_groups groups
@@ -61,6 +94,16 @@ type Querier interface {
 	// Backfill after an operator links a device to a home with a pit area.
 	RecomputeCycleVolumes(ctx context.Context, devEui string) (int64, error)
 	ResolveOpenAlert(ctx context.Context, arg ResolveOpenAlertParams) (Alert, error)
+	SeedHomeOwner(ctx context.Context, arg SeedHomeOwnerParams) (int64, error)
+	// Demo seed (cmd/seed): operator tooling only, never used by a service.
+	// Homes and devices go through UpsertHome / UpsertDevice.
+	SeedSegment(ctx context.Context, arg SeedSegmentParams) error
+	// Input to privacy.AggregateStatus: distinct linked homes with a heartbeat in
+	// (window_start, window_end] and the cycles those heartbeats report
+	// (cycles_since_last counts storm-mode cycles too).
+	SegmentActivity(ctx context.Context, arg SegmentActivityParams) ([]SegmentActivityRow, error)
+	// Input to privacy.AggregateStatus: open alerts on linked homes per segment.
+	SegmentOpenAlertCounts(ctx context.Context) ([]SegmentOpenAlertCountsRow, error)
 	SetCycleVolume(ctx context.Context, arg []SetCycleVolumeParams) *SetCycleVolumeBatchResults
 	SetWatermark(ctx context.Context, arg SetWatermarkParams) error
 	SumStormSummaryCycles(ctx context.Context) (int64, error)

@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test test-integration sim build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail
+.PHONY: all tools proto lint fmt test test-integration sim seed build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail web-install web-dev web-test web-build
 
 all: lint test
 
@@ -63,6 +63,25 @@ sim: env
 	go run ./cmd/simulator -scenario $(SCENARIO) -seed $(SEED) -speed $(SPEED) -homes $(HOMES) \
 	  -sink mqtt -mqtt-url mqtt://localhost:$$(grep '^MQTT_PORT=' deploy/compose/.env | cut -d= -f2) \
 	  -truth-out loadtest/results/sim-truth-$(SCENARIO)-$(SEED).json -hash
+
+## seed: demo segments (illustrative Timberwalk geometry) + the simulator's homes/devices (SEED, HOMES);
+## DEMO_OWNER_SUBJECT=user_... (or the .env value) links that Clerk user to home 0
+DEMO_OWNER_SUBJECT ?= $$(grep '^DEMO_OWNER_SUBJECT=' deploy/compose/.env | cut -d= -f2)
+seed: env
+	go run ./cmd/seed -database-url "$(DB_URL)" -seed $(SEED) -homes $(HOMES) -owner-subject "$(DEMO_OWNER_SUBJECT)"
+
+## web-*: the dashboard in web/ (Vite + React + MapLibre, https on 3034)
+web-install:
+	cd web && npm ci
+
+web-dev:
+	cd web && npm run dev
+
+web-test:
+	cd web && npm run lint && npm test
+
+web-build:
+	cd web && npm run build
 
 ## build: build every service image via compose
 build: env

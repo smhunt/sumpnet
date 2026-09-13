@@ -9,6 +9,7 @@ Short MADR-style records, numbered in the order the decisions were made.
 | [0003](0003-eventing.md) | Service-to-service eventing: Postgres LISTEN/NOTIFY | accepted |
 | [0004](0004-partitioning.md) | Time-series storage: native partitioning + pg_partman | accepted |
 | [0005](0005-privacy-thresholds.md) | Privacy thresholds: segment aggregation with k ≥ 3 | accepted |
+| [0006](0006-api-gateway-auth.md) | api-gateway: Clerk owner auth, one gRPC surface, private neighbourhood stream | accepted |
 
 ## Template
 

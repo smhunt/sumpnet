@@ -9,9 +9,11 @@ import "sumpnet/alerts/v1/alerts.proto";
 option go_package = "github.com/smhunt/sumpnet/gen/go/sumpnet/query/v1;queryv1";
 
 // QueryService is the read API used by the dashboard and the MCP server.
-// Privacy rules (prompt_plan.md §2) are enforced here, not by callers:
-// per-home data is owner-scoped and segment aggregates are suppressed when
-// fewer than 3 homes report.
+// Privacy rules (prompt_plan.md §2, ADR 0005) are enforced here, not by
+// callers: per-home data is owner-scoped and segment aggregates are suppressed
+// when fewer than 3 homes report. Owner identity comes from a Clerk session
+// JWT in the `authorization: Bearer <jwt>` metadata / HTTP header; public
+// RPCs accept anonymous callers, owner RPCs return UNAUTHENTICATED without it.
 service QueryService {
   // GetHome is owner-scoped: a caller only ever sees their own home.
   rpc GetHome(GetHomeRequest) returns (GetHomeResponse) {
@@ -26,8 +28,31 @@ service QueryService {
   }
   // WatchNeighbourhood streams live segment status, storm events and alerts.
   // Over REST (grpc-gateway) this is newline-delimited JSON.
+  // Anonymous subscribers receive segment status and storm events only;
+  // alert updates go only to an authenticated owner, for their own homes.
   rpc WatchNeighbourhood(WatchNeighbourhoodRequest) returns (stream WatchNeighbourhoodResponse) {
     option (google.api.http) = {get: "/v1/neighbourhood:watch"};
+  }
+  // ListSegments is the public street-segment catalogue the map draws.
+  rpc ListSegments(ListSegmentsRequest) returns (ListSegmentsResponse) {
+    option (google.api.http) = {get: "/v1/segments"};
+  }
+  // ListMyHomes lists the homes linked to the authenticated owner.
+  rpc ListMyHomes(ListMyHomesRequest) returns (ListMyHomesResponse) {
+    option (google.api.http) = {get: "/v1/me/homes"};
+  }
+  // ListMyAlerts lists active alerts on the authenticated owner's homes.
+  rpc ListMyAlerts(ListMyAlertsRequest) returns (ListMyAlertsResponse) {
+    option (google.api.http) = {get: "/v1/me/alerts"};
+  }
+  // AcknowledgeMyAlert acknowledges an alert on one of the owner's homes. The
+  // gateway checks ownership, then proxies to alerts.v1.AlertService (the
+  // single writer of alerts). An alert the caller does not own is NOT_FOUND.
+  rpc AcknowledgeMyAlert(AcknowledgeMyAlertRequest) returns (AcknowledgeMyAlertResponse) {
+    option (google.api.http) = {
+      post: "/v1/me/alerts/{alert_id}:acknowledge"
+      body: "*"
+    };
   }
 }
 
@@ -44,8 +69,9 @@ enum SegmentKind {
 message Segment {
   string id = 1;
   string name = 2;
-  // Street-segment polygon as a GeoJSON geometry string.
+  // Street-segment polygon as a GeoJSON geometry string; empty when unset.
   string geometry_geojson = 3;
+  // Homes linked to the segment (not necessarily reporting).
   uint32 home_count = 4;
   SegmentKind kind = 5;
 }
@@ -57,9 +83,12 @@ message Device {
 }
 
 message HomeHealth {
+  // Event time of the newest heartbeat from any of the home's devices.
   google.protobuf.Timestamp last_seen = 1;
   uint32 batt_mv = 2;
   bool mains_ok = 3;
+  // Baseflow storm-analytics used for the home's most recent storm; 0 until
+  // storm-analytics (Phase 4) has computed one.
   double baseflow_cycles_per_day = 4;
   uint32 active_alerts = 5;
 }
@@ -85,10 +114,17 @@ message StormEvent {
 message HomeStormMetrics {
   string storm_id = 1;
   string home_id = 2;
+  // Meaningful only when lag_reached: 0 otherwise.
   double lag_min = 3;
+  // Meaningful only when recession_reached: 0 otherwise.
   double recession_min = 4;
   double volume_l = 5;
   uint32 cycles = 6;
+  // False while the cycle rate never exceeded 2x baseflow (§10 lag).
+  bool lag_reached = 7;
+  // False until the cycle rate is back within 1.2x baseflow (§10 recession).
+  bool recession_reached = 8;
+  google.protobuf.Timestamp storm_started_at = 9;
 }
 
 // SegmentStormMetrics is the public, aggregated view. When homes_reporting
@@ -103,6 +139,9 @@ message SegmentStormMetrics {
   double median_recession_min = 7;
 }
 
+// SegmentStatus is the live public view of one segment over the status
+// window ending at `NeighbourhoodUpdate.ts` (the newest heartbeat event time,
+// so replays of past storms animate too). Suppressed when < 3 homes report.
 message SegmentStatus {
   string segment_id = 1;
   uint32 homes_reporting = 2;
@@ -153,10 +192,42 @@ message GetStormEventResponse {
 message WatchNeighbourhoodRequest {
   // Empty means all segments.
   repeated string segment_ids = 1;
-  // Send the current state of each segment before live updates.
+  // Send the current state of each segment (and, for an owner, their active
+  // alerts, plus open and recent storm events) before live updates.
   bool send_snapshot = 2;
 }
 
 message WatchNeighbourhoodResponse {
   NeighbourhoodUpdate update = 1;
+}
+
+message ListSegmentsRequest {}
+
+message ListSegmentsResponse {
+  repeated Segment segments = 1;
+}
+
+message ListMyHomesRequest {}
+
+message ListMyHomesResponse {
+  repeated Home homes = 1;
+}
+
+message ListMyAlertsRequest {
+  // Optional: one of the caller's homes. A home the caller does not own is
+  // NOT_FOUND.
+  string home_id = 1;
+}
+
+message ListMyAlertsResponse {
+  repeated sumpnet.alerts.v1.Alert alerts = 1;
+}
+
+message AcknowledgeMyAlertRequest {
+  string alert_id = 1;
+  string note = 2;
+}
+
+message AcknowledgeMyAlertResponse {
+  sumpnet.alerts.v1.Alert alert = 1;
 }
