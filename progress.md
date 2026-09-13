@@ -2,7 +2,7 @@
 
 ## Status
 
-As of 2026-09-12. Session entries below, newest first, hold the details and acceptance evidence.
+As of 2026-09-13. Session entries below, newest first, hold the details and acceptance evidence.
 
 | Phase | State |
 |---|---|
@@ -17,9 +17,69 @@ As of 2026-09-12. Session entries below, newest first, hold the details and acce
 | 8 — AWS + load test | not started |
 | 9 — Pilot | not started |
 
-In flight: the Phase 5 live map check; docs refresh on `docs/refresh`. Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate. Not done yet: serving `inflow_est_l` through QueryService.
+In flight: the Phase 5 live map check; the real-geography Timberwalk simulation with observed ECCC rain (`feature/timberwalk-real-sim`, PR open, live seed and replay after merge). Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate. Not done yet: serving `inflow_est_l` through QueryService.
 
 ## Session log (newest first)
+
+### 2026-09-13 (real-geography Timberwalk site and observed ECCC rain, branch `feature/timberwalk-real-sim`)
+- **Owner decisions:** simulate the 7 core Timberwalk streets (plan 39T-MC0401 plus Timberwalk Close) by default;
+  cache the northern streets now as three larger site configs; never put the owner's address in any committed
+  file, message or PR text (it is passed only at seed time).
+- **Built (ADR 0008):**
+  - `internal/site` and `cmd/dataimport` (`make site-import`): committed site configs, County ArcGIS queries
+    with paging and retries, a raw cache per street, and a gitignored snapshot. Segments split long streets
+    into blocks along the centreline, with non-overlapping raster-traced outlines; homes get salted ids and
+    are ordered by id.
+  - `internal/raincache` (`make eccc-import`).
+  - `sim.Config.Site`, `Scenario.RainMinutes` and `ObservedRainScenario`.
+  - `cmd/simulator -site-file` and `-scenario eccc -from -to`; `cmd/seed -site-file -owner-address`.
+  - Dashboard fallback centre moved to Timberwalk. `data/` gitignored.
+- **Import (networked, 2026-09-13):** 19 streets, 628 address points, 627 homes (one Maplewood Lane civic point
+  dropped for its units). Every street chains into one centreline.
+
+  | Site | Streets | Homes | Segments |
+  |---|---|---|---|
+  | `timberwalk` | 7 | 190 | 9 |
+  | `timberwalk-plus-basil-bowman` | 10 | 392 | 16 |
+  | `timberwalk-plus-plant-streets` | 14 | 518 | 21 |
+  | `timberwalk-nearby` | 19 | 627 | 26 |
+
+  The first three rebuild with `OFFLINE=1` from the cache alone. Timberwalk segments: arrowwood-path-1 31,
+  mayapple-cres-1 24, mayapple-cres-2 24, mossy-wood-walk-1 8, songbird-lane-1 3, timberwalk-trail-1 37,
+  timberwalk-trail-2 36, violet-court-1 22, timberwalk-close-1 5. Homes outside their outline: 0, except 1
+  on Ashwood Crescent in the nearby set. `OWNER_ADDRESS` lookup checked (result reported to the main session,
+  not recorded here).
+- **ECCC import 2026-08-01 → 09-12:** 1008 of 1008 hours, 236.3 mm. The licence verified as ECCC's Data
+  Services End-use Licence (attribution required), not OGL-Canada.
+- **In-memory simulation** (`-scenario eccc -site-file data/sites/timberwalk.json -seed 42 -sink stdout -hash`):
+  - 190 homes, 9 segments, 2 gauges (west and east ends), 1,017,470 events (fPort 1 766,080; 2 240,215;
+    3 80; 4 2,420; 5 8,675), 257,985 true cycles, ≈30 s per run.
+  - Hash `04ea5d73cce1dafe0de2d6e6aee167f5d77a377f50f4001dd0489394168f46a9` on both runs.
+  - Gauges counted 236.2 mm.
+  - Alarms: 54 continuous_run and 26 float_high on 51 healthy homes, emergent from the heavy hours rather
+    than pinned on any home.
+
+  Truth storms (§10) vs the ECCC daily totals:
+
+  | Storm (UTC) | Sim total | ECCC daily | Peak | Median lag | Median recession |
+  |---|---|---|---|---|---|
+  | 08-02 09:00 → 08-03 01:00 | 34.9 mm | 34.4 (08-02) | 11.7 mm/h | 0 min | 872 min |
+  | 08-07 11:00 → 15:00 | 59.7 mm | 60.7 (08-06/07; 1.0 mm on 08-06 is > 6 h earlier) | 39.8 mm/h | 44 min | 1216 min |
+  | 08-12 16:00 → 17:00 | 6.9 mm | 6.9 | 6.9 mm/h | 45 min | 766 min |
+  | 08-23 10:00 → 08-24 06:00 | 29.8 mm | 31.6 (08-23/24) | 9.4 mm/h | 0 min | 911 min |
+  | 08-30 13:00 → 08-31 18:00 | 34.9 mm | 34.9 | 7.3 mm/h | 0 min | 1143 min |
+  | 09-02 18:00 → 09-03 03:00 | 32.1 mm | 37.6 (09-02/03, both storms) | 13.9 mm/h | 45 min | 970 min |
+  | 09-03 20:00 → 23:00 | 5.5 mm | (above) | 4.3 mm/h | 44.5 min | 876.5 min |
+  | 09-09 12:00 → 21:00 | 13.5 mm | 13.5 | 3.4 mm/h | 0 min | 918 min |
+
+  Median lag is 0 when drizzle hours before the first ≥ 1 mm/h hour already raised inflow.
+- **Synthetic mode unchanged:** storm50 (60 homes), outage (24), failing-pump (12 homes, 4 segments, 96 h) and
+  thaw50 (16, no gauges) stream hashes equal origin/main.
+- **Verification:** `make lint`, `make test`, the integration suite and the web lint, test and build are green
+  (numbers in the PR).
+- **Not done:** live seed and replay into the stack (the main session, after merge); the County licence
+  question; a measured basis for segment kinds; the compose `sim` profile has no `data/` mount (use
+  `make sim` from the host).
 
 ### 2026-09-12 (integration: merges, owner decisions, JWKS fix, docs refresh)
 - **Resend email:** alert email goes through Resend SMTP (`smtp.resend.com:465`, user `resend`, API key

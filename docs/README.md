@@ -64,8 +64,9 @@ ChirpStack-shaped events straight to Mosquitto.
 | `storm-analytics` | Storm events and per-home response | `rainfall` (by `updated_at`), `readings`, `cycle_events`, `storm_summaries` | `storm_events`, `home_storm_metrics`; NOTIFY | ops `:8080` | none |
 | `api-gateway` | Public and owner API, live stream | read-only pool + LISTEN; Clerk JWKS | calls `AlertService.Acknowledge` | REST `:8080` (TLS), gRPC `:9092`, ops `:8081` | 3134 |
 | `mcp-server` | Placeholder until Phase 6 | none | none | ops `:8080` | none |
-| `simulator` (CLI) | Deterministic replay | scenario | MQTT events, truth JSON | none | none |
-| `seed` (CLI) | Demo neighbourhood | `internal/seed/segments.geojson`, simulator parameters | `segments`, `homes`, `devices`, `home_owners` | none | none |
+| `simulator` (CLI) | Deterministic replay | scenario; optional site snapshot and ECCC rain cache (`data/`) | MQTT events, truth JSON | none | none |
+| `seed` (CLI) | Demo neighbourhood | `internal/seed/segments.geojson` or a site snapshot, simulator parameters | `segments`, `homes`, `devices`, `home_owners` | none | none |
+| `dataimport` (CLI) | Site and rain caches (ADR 0008) | County of Middlesex ArcGIS layers, ECCC GeoMet over HTTPS | gitignored `data/cache/middlesex/`, `data/sites/`, `data/rain/` | none | none |
 
 Every consumer also writes its own rows in `consumer_watermarks`.
 
@@ -367,6 +368,7 @@ sumpnet/
 ├── cmd/                      one main package per binary
 │   ├── simulator/            CLI: deterministic neighbourhood replay (compose profile sim)
 │   ├── seed/                 CLI: demo segments, homes, devices, owner link (make seed)
+│   ├── dataimport/           CLI: County site import, ECCC hourly rain cache (make site-import, eccc-import)
 │   ├── lora-bridge/          ChirpStack uplink events -> ingest
 │   ├── mqtt-bridge/          Wi-Fi envelope uplinks -> ingest
 │   ├── ingest/               IngestService: idempotent bulk writes + NOTIFY
@@ -380,7 +382,9 @@ sumpnet/
 │   ├── platform/             config, slog, health/metrics endpoints, shutdown, healthcheck
 │   ├── codec/                fPort 1-5 binary payloads with golden vectors
 │   ├── chirpstack/           uplink topics and UplinkEvent JSON
-│   ├── sim/                  simulator engine, scenarios, rain gauges, sinks, truth
+│   ├── sim/                  simulator engine, scenarios, rain gauges, sinks, truth, sites, observed rain
+│   ├── site/                 site configs (sites/*.json), County ArcGIS import, segments and outlines, salted ids
+│   ├── raincache/            observed hourly rain cache for -scenario eccc
 │   ├── bridge/               shared MQTT consumer, bounded batchers, ingest client
 │   ├── lorabridge/           ChirpStack event decoder
 │   ├── nodebridge/           Wi-Fi envelope decoder
@@ -395,7 +399,7 @@ sumpnet/
 │   ├── privacy/              k >= 3 segment aggregates (ADR 0005)
 │   ├── auth/                 Clerk JWT verifier, gRPC interceptors; authtest/ test JWKS
 │   ├── gateway/              QueryService, WatchNeighbourhood hub, REST, CORS, TLS
-│   ├── seed/                 segments.geojson (illustrative outlines) + seeding
+│   ├── seed/                 segments.geojson (illustrative outlines) + seeding, synthetic or from a site
 │   ├── domain/               sentinel errors
 │   ├── testinfra/            testcontainers helpers: Postgres, Mosquitto, Mailpit
 │   ├── testpipeline/         in-process pipeline helpers for tests
@@ -408,6 +412,7 @@ sumpnet/
 ├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
 ├── docs/                     README.md (this map), node-mqtt.md, adr/, research/
 ├── loadtest/results/         make sim truth exports (gitignored JSON)
+├── data/                     gitignored: County query cache, site snapshots, ECCC rain (never committed)
 ├── .github/                  workflows/ci.yml, dependabot.yml
 ├── Dockerfile                one distroless image, --build-arg SERVICE=<name>
 ├── Makefile, .versions.env   make targets; pinned tool versions shared with CI
@@ -496,6 +501,12 @@ the gateway's `AcknowledgeMyAlert`.
   appears on one.
 - The MCP server (Phase 6) must read through QueryService and so inherits the same rules. The
   threshold is a constant; changing it needs a new ADR.
+- Real-geography sites (ADR 0008):
+  - Address text and house positions stay in the gitignored snapshot and in memory while seeding.
+  - Site homes get HMAC-salted ids and DevEUIs, ordered by id rather than by position.
+  - Segments carry only a street outline, a name and a kind.
+  - The owner's home is found with `OWNER_ADDRESS` at seed time, never by index.
+  - A scenario that pins pump health on specific homes is refused on a site.
 
 ## Deployment notes
 
@@ -554,6 +565,29 @@ The result was two closed storms:
 - a real 13.5 mm ECCC storm on 2026-09-09, which the weather poller fetched live. With
   `WEATHER_ECCC_ENABLED=true` (the default), real storms appear alongside replays.
 
+### Real Timberwalk streets with recent real rain
+
+Not yet run on the live stack. The order matters: the imports fill the gitignored caches that the seed
+and the simulator read offline.
+
+```bash
+make site-import SITE=timberwalk                         # County address points + road centrelines (cached per street)
+make eccc-import FROM=2026-08-01 TO=2026-09-12           # LONDON CS hourly rain
+make seed SITE=timberwalk OWNER_ADDRESS="<number> <STREET>" DEMO_OWNER_SUBJECT=user_...
+make sim SCENARIO=eccc SITE=timberwalk FROM=2026-08-01 TO=2026-09-12 SPEED=0
+```
+
+- Keep the same cache: home ids and DevEUIs come from the salt in `data/cache/middlesex/`, so a fresh
+  import on another machine needs a re-seed. Only pit areas depend on `SEED`.
+- A database that already holds the illustrative `seg-01`…`seg-08` and their 60 homes keeps them. The
+  map then fits both sets, which are about 3 km apart.
+- The replayed rain gauges are primary over the same hours, so ECCC rows the poller stores only fill
+  gaps. The replay spans six weeks, so expect the OFFLINE sweep noise below.
+- In memory (seed 42, 2026-08-01 → 09-12): 190 homes, 9 segments, 1,017,470 events, ≈30 s unpaced,
+  stream hash `04ea5d73…`, and 8 storms whose totals match the ECCC daily totals.
+- `make site-import SITE=timberwalk-nearby` (or `-plus-basil-bowman`, `-plus-plant-streets`) switches to
+  the larger cached street sets without a network round trip.
+
 ### Replay alert noise
 
 The alerts OFFLINE sweep is the one rule that uses wall-clock time, and the compose file hard-codes
@@ -590,7 +624,12 @@ disabled, and the dashboard serves public views only.
 
 ## Known gaps
 
-- Street outlines in `internal/seed/segments.geojson` are illustrative, not surveyed.
+- Street outlines in `internal/seed/segments.geojson` are illustrative, not surveyed. Real-geography
+  site outlines are approximate bands around County road centrelines and address points, not lot
+  lines. Their segment kinds are illustrative, and the County data licence is unconfirmed, so site
+  data are not committed or published (`prompt_plan.md` §14).
+- The compose `sim` profile has no `data/` mount; run site and observed-rain replays with `make sim`
+  from the host.
 - OpenStreetMap's public tiles suit light development use only; a pilot needs its own tile
   provider (`VITE_TILE_URL`).
 - Phase 5's "live storm replay visible on the map" acceptance check has not yet been run in a
