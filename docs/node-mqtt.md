@@ -37,7 +37,7 @@ UTF-8 JSON, one uplink per message:
 | `rssi` | integer dBm | no | Wi-Fi RSSI, stored as `rssi_dbm` with `gateway_id = "wifi"`. |
 
 Unknown fields are ignored. Anything else — bad base64, wrong length for the
-port, unknown port, malformed JSON — is dropped with a `drops_total{reason}`
+port, unknown port, malformed JSON — is dropped with a `sumpnet_bridge_drops_total{reason}`
 counter and a debug log line; the bridge never disconnects over a bad message.
 
 ## Semantics
