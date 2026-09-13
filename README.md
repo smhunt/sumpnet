@@ -152,8 +152,14 @@ telemetry change, so replays and late data converge
 
 `internal/e2e/phase4_integration_test.go` checks the results against the simulator's ground truth:
 recession within ±10 % for every home, and lag within ±10 % or 15 minutes, whichever is larger
-(one heartbeat interval; tolerance approved by the owner on 2026-09-12). A pump-rate storm inflow
-estimate is in review in PR #9.
+(one heartbeat interval; tolerance approved by the owner on 2026-09-12).
+
+Each home's storm volume is stored two ways. `volume_l` sums the §9 pit-level drop per cycle and is
+kept as a conservative floor, because it leaves out water that flows in while the pump runs.
+`inflow_est_l` is the home's pump rate, calibrated on the dry-weather cycles baseflow uses, times run
+time (migration 0006, PR #9). In the same e2e the pump rate is within 5 % of the simulator's and
+`inflow_est_l` within 2.2 % of the true storm plus baseflow inflow, where `volume_l` was 8–62 % low.
+The API does not serve `inflow_est_l` yet.
 
 ```bash
 # A 50 mm storm with a 3-day dry lead (baseflow history) and a 3-day tail (recession), unpaced:
@@ -201,7 +207,7 @@ go run ./cmd/simulator -scenario storm50 -seed 42 -sink stdout -hash > events.js
 | 1: Contracts + simulator | done 2026-09-11 |
 | 2: Ingest path | done 2026-09-11 |
 | 3: Cycle detection + alerts | done 2026-09-11; merged with Resend email 2026-09-12 |
-| 4: Weather + storm analytics | done 2026-09-12 (lag tolerance "±10 % or 15 min" approved); pump-rate inflow estimate in review (PR #9) |
+| 4: Weather + storm analytics | done 2026-09-12 (lag tolerance "±10 % or 15 min" approved); pump-rate storm inflow estimate added (PR #9) |
 | 5: API gateway + dashboard | built 2026-09-12; acceptance test passes; live storm replay on the map still to be checked |
 | 6: MCP server | not started (placeholder service) |
 | 7: Firmware + first real nodes | not started |

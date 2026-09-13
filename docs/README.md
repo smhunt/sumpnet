@@ -150,7 +150,7 @@ sequenceDiagram
 
 ## Data model
 
-Tables from migrations `0001` to `0005`. Radio metadata columns on the telemetry tables (`rssi_dbm`,
+Tables from migrations `0001` to `0006`. Radio metadata columns on the telemetry tables (`rssi_dbm`,
 `snr_db`, `sf`, `gateway_id`, `dedup_id`) are left out of the diagram. Solid relationships are
 foreign keys; dotted ones are logical links with no foreign key.
 
@@ -283,6 +283,9 @@ erDiagram
     double volume_l
     integer cycles
     double baseflow_cpd
+    double inflow_est_l "pump rate x run time"
+    double pump_rate_lps
+    text pump_rate_source "dry_weather or bucket_test"
     timestamptz computed_at
   }
   home_owners {
@@ -329,9 +332,7 @@ erDiagram
 | `0003_alerts` | `alerts` (one open row per device and code), `detections`, `consumer_watermarks`, `inserted_at` indexes |
 | `0004_storms_owners` | `segments.kind`, `rainfall`, `storm_events`, `home_storm_metrics`, `home_owners` |
 | `0005_rain_gauges` | `rain_gauge_uplinks` (monthly partitions), `rainfall(updated_at)` index |
-
-In review, not merged: PR #9 adds migration `0006_pump_rate` (a pump-rate storm inflow estimate on
-`home_storm_metrics`).
+| `0006_pump_rate` | `home_storm_metrics.inflow_est_l`, `pump_rate_lps`, `pump_rate_source`: storm inflow from the pump rate calibrated on dry-weather cycles, beside the §9 `volume_l` floor |
 
 Single writers: `ingest` owns the telemetry tables, `cycle-detector` owns `detections` and
 `est_volume_l`, `alerts` owns `alerts`, `weather` owns `rainfall`, and `storm-analytics` owns
@@ -400,7 +401,7 @@ sumpnet/
 │   └── e2e/                  Phase 3, 4 and 5 acceptance tests (integration tag)
 ├── proto/sumpnet/            telemetry/v1, query/v1, alerts/v1
 ├── gen/go/                   generated protobuf, gRPC and grpc-gateway code (ADR 0002)
-├── migrations/               0001-0005 SQL for golang-migrate, embedded by embed.go
+├── migrations/               0001-0006 SQL for golang-migrate, embedded by embed.go
 ├── deploy/compose/           docker-compose.yml, .env.example, chirpstack/, mosquitto/,
 │                             chirpstack-gateway-bridge/, postgres/initdb/
 ├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
@@ -538,5 +539,8 @@ the gateway's `AcknowledgeMyAlert`.
 - Phase 5's "live storm replay visible on the map" acceptance check has not yet been run in a
   browser against `make up`.
 - `mcp-server` is a placeholder until Phase 6.
+- `home_storm_metrics.inflow_est_l`, `pump_rate_lps` and `pump_rate_source` are computed and stored but
+  not yet served by QueryService. `pump_rate_source = bucket_test` (a homeowner's measured rate) is
+  reserved; nothing records it yet.
 - Alert email goes to one operator address; per-owner email needs a decryption scheme for owner
   contacts (`prompt_plan.md` §14).

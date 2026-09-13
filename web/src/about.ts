@@ -97,7 +97,6 @@ export const ROADMAP: RoadmapGroup[] = [
   {
     category: 'In progress',
     items: [
-      { title: 'Storm inflow estimated from each pump’s own flow rate, beside the pit-level estimate', priority: 'high' },
       { title: 'Check a live storm replay on the map against the running stack', priority: 'high' },
     ],
   },
@@ -114,6 +113,7 @@ export const ROADMAP: RoadmapGroup[] = [
       { title: 'First real sensors installed alongside the simulated homes', priority: 'high' },
       { title: 'Consent form and plain-language data policy for pilot homes', priority: 'high' },
       { title: 'Cloud deployment and published load-test results', priority: 'medium' },
+      { title: 'Show storm inflow from each pump’s own flow rate in the owner view', priority: 'medium' },
       { title: 'Surveyed street outlines agreed with Middlesex Centre', priority: 'medium' },
       { title: 'Alert email to each owner instead of one operator', priority: 'low' },
     ],

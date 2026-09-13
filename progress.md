@@ -10,14 +10,14 @@ As of 2026-09-12. Session entries below, newest first, hold the details and acce
 | 1 — Contracts + simulator | done 2026-09-11 (PR #2) |
 | 2 — Ingest path | done 2026-09-11 (PR #3) |
 | 3 — Cycle detection + alerts | done 2026-09-11; merged 2026-09-12 with Resend email (PR #4) |
-| 4 — Weather + storm analytics | done 2026-09-12 (PR #7); lag tolerance "±10 % or 15 min" (median ≤ 5 min) approved by the owner, recession strict ±10 %; pump-rate inflow estimate in review (PR #9, `phase-4/pump-rate`) |
+| 4 — Weather + storm analytics | done 2026-09-12 (PR #7); lag tolerance "±10 % or 15 min" (median ≤ 5 min) approved by the owner, recession strict ±10 %; pump-rate storm inflow estimate merged the same day (PR #9, migration 0006) |
 | 5 — API gateway + dashboard | built 2026-09-12 (PR #6); `TestPhase5Acceptance` green; "live storm replay visible on the map" not yet checked in a browser against `make up` |
 | 6 — MCP server | not started (`cmd/mcp-server` is a placeholder) |
 | 7 — Firmware + first real nodes | not started |
 | 8 — AWS + load test | not started |
 | 9 — Pilot | not started |
 
-In flight: PR #9 (pump-rate storm inflow estimate, migration 0006); homeowner bucket-test research (measuring pump flow rate by pouring a known volume into the pit); the Phase 5 live map check; docs refresh on `docs/refresh`.
+In flight: homeowner bucket-test research (measuring pump flow rate by pouring a known volume into the pit); the Phase 5 live map check; docs refresh on `docs/refresh`. Not done yet: serving `inflow_est_l` through QueryService.
 
 ## Session log (newest first)
 
@@ -31,18 +31,19 @@ In flight: PR #9 (pump-rate storm inflow estimate, migration 0006); homeowner bu
   `contracts/phase-4-5`.
 - **Merges:** PR #4 (Phase 3), #5 (contracts), #6 (Phase 5) and #7 (Phase 4) merged on the owner's
   instruction. Main was merged into `phase-4/weather` first; conflicts in README, ADR index, progress
-  and sqlcgen were resolved (sqlc regenerated).
+  and sqlcgen were resolved (sqlc regenerated). PR #8 (JWKS fix) and PR #9 (pump-rate inflow estimate,
+  entry below) followed the same evening.
 - **Owner decisions:** rain gauge uplink = fPort 5, 11 B, cumulative tip counter; owner auth = Clerk;
   Phase 4 lag tolerance "±10 % or 15 min, whichever is larger, median ≤ 5 min" approved as built
   (recession stays strict ±10 %); storm volume keeps the §9 pit-drop floor and adds a pump-rate inflow
-  estimate (follow-up branch `phase-4/pump-rate`, now PR #9).
+  estimate (follow-up branch `phase-4/pump-rate`, merged as PR #9).
 - **Fix (PR #8, merged):** after a Clerk signing-key rotation the api-gateway rejected tokens signed
   with the new key until the hourly JWKS refresh. jwkset reuses the `RateLimitWaitMax` context for the
   refresh request, and it was 1 ms; it is now 10 s (the HTTP timeout). New
   `TestKeyRotationWithSlowJWKS`; `-race -count=30` green.
-- **In flight:** PR #9 (pump-rate inflow estimate, migration 0006); a research report on the homeowner
-  bucket test for measuring pump flow rate; the Phase 5 browser check of a live storm replay against
-  `make up`.
+- **In flight:** a research report on the homeowner bucket test for measuring pump flow rate (the
+  source `bucket_test` is reserved for it); the Phase 5 browser check of a live storm replay against
+  `make up`. Not done yet: serving `inflow_est_l` through QueryService.
 - **Docs refresh (`docs/refresh`):** root README (Mermaid architecture, quickstart, ports, status,
   load-test placeholder, "at 1M devices"), `docs/README.md` maps (system, data flow, ER model, layout,
   API, privacy, deployment), CLAUDE.md commands/ports/invariants, this Status table, CHANGELOG 0.4.0 and

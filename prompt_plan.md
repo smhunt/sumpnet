@@ -158,7 +158,7 @@ sumpnet/
 │   └── e2e/                  Phase 3, 4 and 5 acceptance tests (integration tag)
 ├── proto/sumpnet/            telemetry/v1, query/v1, alerts/v1
 ├── gen/go/                   generated protobuf, gRPC and grpc-gateway code (ADR 0002)
-├── migrations/               0001-0005 SQL for golang-migrate, embedded by embed.go
+├── migrations/               0001-0006 SQL for golang-migrate, embedded by embed.go
 ├── deploy/compose/           docker-compose.yml, .env.example, chirpstack/, mosquitto/,
 │                             chirpstack-gateway-bridge/, postgres/initdb/
 ├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
