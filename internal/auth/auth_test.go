@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -257,3 +258,43 @@ type fakeStream struct {
 }
 
 func (f *fakeStream) Context() context.Context { return f.ctx }
+
+// slowTransport delays every request so a JWKS refresh takes longer than a
+// tiny rate-limit wait budget.
+type slowTransport struct {
+	rt    http.RoundTripper
+	delay time.Duration
+}
+
+func (s slowTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	time.Sleep(s.delay)
+	return s.rt.RoundTrip(r)
+}
+
+// TestKeyRotationWithSlowJWKS is the regression test for jwkset reusing the
+// RateLimitWaitMax context for the refresh request: with a millisecond budget
+// a rotated key was never fetched, however quickly the issuer published it.
+func TestKeyRotationWithSlowJWKS(t *testing.T) {
+	is := issuer(t)
+	base := is.Client()
+	rt := base.Transport
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	client := &http.Client{Transport: slowTransport{rt: rt, delay: 50 * time.Millisecond}, Timeout: 10 * time.Second}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	v, err := auth.NewVerifier(ctx, is.Config(dashboard), auth.WithHTTPClient(client))
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := authtest.NewKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	is.Publish("test-key-2", next)
+	raw := is.MustToken(authtest.TokenOptions{Subject: "user_b", AZP: dashboard, Key: next, KID: "test-key-2"})
+	if p, err := v.Verify(context.Background(), raw); err != nil || p.Subject != "user_b" {
+		t.Fatalf("rotated key behind a slow JWKS: %+v, %v", p, err)
+	}
+}

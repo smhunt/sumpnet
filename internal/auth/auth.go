@@ -181,9 +181,12 @@ func NewVerifier(ctx context.Context, cfg Config, opts ...Option) (*Verifier, er
 		Client:      client,
 		HTTPTimeout: 10 * time.Second,
 		// Key rotation: an unknown kid may refresh the set at most once a
-		// minute, and a caller never waits for the limiter.
+		// minute. jwkset reuses the RateLimitWaitMax context for the refresh
+		// request itself, so it must cover a whole JWKS fetch. Limiter.Wait
+		// fails at once when the next token is further away than this, so a
+		// caller never queues behind the one-minute limit.
 		RefreshUnknownKID: rate.NewLimiter(rate.Every(time.Minute), 1),
-		RateLimitWaitMax:  time.Millisecond,
+		RateLimitWaitMax:  10 * time.Second,
 		RefreshInterval:   time.Hour,
 	})
 	if err != nil {
