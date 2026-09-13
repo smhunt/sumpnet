@@ -26,7 +26,7 @@ export function Legend({ title, max, unit }: Props) {
       <p className="legend-hidden">
         <span className="swatch-hatch" aria-hidden="true" /> Hidden: fewer than 3 homes report
       </p>
-      <p className="legend-note">Street outlines are illustrative, not surveyed.</p>
+      <p className="legend-note">Street outlines are approximate, not surveyed lot lines.</p>
     </figure>
   )
 }
