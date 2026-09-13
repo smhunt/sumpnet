@@ -8,7 +8,8 @@ street-by-street storm response, early warning of failing pumps, and outage-risk
 Pilot neighbourhood: Timberwalk, Ilderton (Middlesex Centre, Ontario). The specification and
 roadmap live in [`prompt_plan.md`](prompt_plan.md), the session log in [`progress.md`](progress.md),
 the architecture maps in [`docs/README.md`](docs/README.md), and the decisions in
-[`docs/adr/`](docs/adr/README.md).
+[`docs/adr/`](docs/adr/README.md). Research notes: [`docs/research/`](docs/research/pump-flow-bucket-test.md)
+(the pump bucket test).
 
 ## Architecture
 
@@ -68,8 +69,8 @@ make tools          # buf, golangci-lint, sqlc, migrate into ./bin (versions in 
 make up             # creates deploy/compose/.env from .env.example, builds, waits for every healthcheck
 make ps             # every service should be "healthy"
 
-make seed           # illustrative Timberwalk streets + the simulator's 60 homes and devices (SEED=42 HOMES=60)
-make sim SCENARIO=storm50 SEED=42 SPEED=60   # 50 mm storm, 60 homes, 60x speed (about 24 min); truth -> loadtest/results/
+make seed SEED=42 HOMES=60                              # illustrative Timberwalk streets + the simulator's homes and devices
+make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0 # 50 mm storm with 3-day lead and tail, unpaced; truth -> loadtest/results/
 
 cp web/.env.example web/.env.local           # optional: VITE_CLERK_PUBLISHABLE_KEY enables owner sign-in
 make web-install && make web-dev             # dashboard on https://dev.ecoworks.ca:3034
@@ -79,16 +80,23 @@ make alerts-testmail   # optional: one delivery check once SMTP_* and ALERTS_TO 
 
 Notes for a fresh machine:
 
-- Run `make seed` before `make sim`. Devices the seed has not linked to a home are auto-registered
-  unlinked, and unlinked devices never appear in owner views or public aggregates.
-- To link your Clerk user to simulated home 0, set `CLERK_ISSUER` in `deploy/compose/.env` and run
-  `make seed DEMO_OWNER_SUBJECT=user_...` (or set `DEMO_OWNER_SUBJECT` there).
-- For replays of simulated storms, set `WEATHER_ECCC_ENABLED=false` in `deploy/compose/.env`, so
-  live Environment Canada data does not mix with simulated rain.
+- Run `make seed` before `make sim`, with the same `SEED` and `HOMES`. Otherwise the simulated devices
+  are auto-registered unlinked, and unlinked devices never appear in owner views or public aggregates.
+- The ECCC poller is on by default, so real recent storms appear beside replayed ones. On 2026-09-12
+  this demo produced two closed storms: the simulated 50 mm gauge storm with metrics for all 60 homes,
+  and a real 13.5 mm ECCC storm from 2026-09-09. Set `WEATHER_ECCC_ENABLED=false` in
+  `deploy/compose/.env` to see simulated rain only.
+- Replaying past simulated data raises an OFFLINE alert for every device. The sweep compares against
+  wall-clock time (`ALERTS_OFFLINE_AFTER: 1h` in the compose file), so this is expected.
+- Without Clerk values the gateway logs `auth:false` and the dashboard shows public views only. To link
+  your Clerk user to simulated home 0, set `CLERK_ISSUER` in `deploy/compose/.env` and run
+  `make seed SEED=42 HOMES=60 DEMO_OWNER_SUBJECT=user_...` (or set `DEMO_OWNER_SUBJECT` there).
 - The api-gateway and the Vite dev server serve TLS with the shared mkcert certificate in
   `~/Code/.traefik/certs`. Without it both fall back to plain HTTP; then set
   `API_PROXY_TARGET=http://localhost:3134` in `web/.env.local`.
 - The ChirpStack UI is on `dev.ecoworks.ca:3131` over plain HTTP (admin/admin).
+- Backfilling derived columns after a migration, and homes that never get a baseflow: see the
+  [operations runbook](docs/README.md#operations-runbook).
 
 Development loop: `make lint`, `make test`, `make test-integration` (Docker), `make proto` after
 editing `proto/`, `make sqlc` after editing `internal/store/queries/` or `migrations/`, and
@@ -159,7 +167,9 @@ kept as a conservative floor, because it leaves out water that flows in while th
 `inflow_est_l` is the home's pump rate, calibrated on the dry-weather cycles baseflow uses, times run
 time (migration 0006, PR #9). In the same e2e the pump rate is within 5 % of the simulator's and
 `inflow_est_l` within 2.2 % of the true storm plus baseflow inflow, where `volume_l` was 8–62 % low.
-The API does not serve `inflow_est_l` yet.
+The API does not serve `inflow_est_l` yet. How a homeowner bucket test should feed this is an open owner
+decision: the [research report](docs/research/pump-flow-bucket-test.md) finds that a measured pour
+mainly calibrates the pit's effective area rather than the pump rate.
 
 ```bash
 # A 50 mm storm with a 3-day dry lead (baseflow history) and a 3-day tail (recession), unpaced:

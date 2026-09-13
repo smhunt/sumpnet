@@ -3,7 +3,8 @@
 sumpnet turns sump-pit sensors in volunteer homes into street-level storm response and owner
 alerts. This page maps the running system: services, data flow, data model, repository layout, API
 and deployment. [`prompt_plan.md`](../prompt_plan.md) is the specification, [`adr/`](adr/README.md)
-records the decisions, and the root [`README.md`](../README.md) has the quickstart and status.
+records the decisions, and the root [`README.md`](../README.md) has the quickstart and status. Research notes live in
+[`research/`](research/pump-flow-bucket-test.md).
 
 ## System overview
 
@@ -405,7 +406,7 @@ sumpnet/
 ├── deploy/compose/           docker-compose.yml, .env.example, chirpstack/, mosquitto/,
 │                             chirpstack-gateway-bridge/, postgres/initdb/
 ├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
-├── docs/                     README.md (this map), node-mqtt.md, adr/
+├── docs/                     README.md (this map), node-mqtt.md, adr/, research/
 ├── loadtest/results/         make sim truth exports (gitignored JSON)
 ├── .github/                  workflows/ci.yml, dependabot.yml
 ├── Dockerfile                one distroless image, --build-arg SERVICE=<name>
@@ -531,6 +532,62 @@ the gateway's `AcknowledgeMyAlert`.
 - **AWS (Phase 8, not started).** Terraform for VPC, ECS Fargate per service, RDS Postgres with
   pg_partman, ALB (gRPC and HTTP), Secrets Manager and CloudWatch.
 
+## Operations runbook
+
+Verified on the live stack on 2026-09-12.
+
+### Demo that works
+
+```bash
+make up
+make seed SEED=42 HOMES=60
+make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0
+make web-install && make web-dev     # then open https://dev.ecoworks.ca:3034
+```
+
+`make seed` and `make sim` must use the same `SEED` and `HOMES`. The seed derives homes and DevEUIs
+from them, so a mismatch leaves the simulated devices unlinked and invisible to every view.
+
+The result was two closed storms:
+
+- the simulated 50 mm gauge storm, with `home_storm_metrics` for 60 homes;
+- a real 13.5 mm ECCC storm on 2026-09-09, which the weather poller fetched live. With
+  `WEATHER_ECCC_ENABLED=true` (the default), real storms appear alongside replays.
+
+### Replay alert noise
+
+The alerts OFFLINE sweep is the one rule that uses wall-clock time, and the compose file hard-codes
+`ALERTS_OFFLINE_AFTER: 1h`. Replaying old simulated data therefore raises an OFFLINE alert for every
+device, and they sit beside the replay's real detections. This is expected; the setting is 0 only in
+tests.
+
+### Backfill after a migration adds derived columns
+
+`storm-analytics` recomputes only when its inputs change, so a migration that adds derived columns
+(such as 0006's `inflow_est_l`) leaves existing rows empty. Rewinding only its `rainfall` watermark is
+not enough: an unchanged storm row recomputes only the homes whose telemetry changed. What worked:
+
+```bash
+docker compose -f deploy/compose/docker-compose.yml stop storm-analytics
+make db-shell
+#   update consumer_watermarks set inserted_at = '2000-01-01'
+#    where consumer = 'storm-analytics' and source = 'cycle_events';
+docker compose -f deploy/compose/docker-compose.yml start storm-analytics
+```
+
+That filled 59 of the 60 homes.
+
+### Homes without a baseflow
+
+Simulated home 9 cycles about 500 times a day in dry weather, so no baseflow can be established. Its
+`lag_min`, `recession_min` and pump rate stay NULL by design (§10: no baseflow means no lag or
+recession).
+
+### Running without Clerk
+
+With no Clerk values in `deploy/compose/.env`, the gateway logs `auth:false` at startup. Owner RPCs are
+disabled, and the dashboard serves public views only.
+
 ## Known gaps
 
 - Street outlines in `internal/seed/segments.geojson` are illustrative, not surveyed.
@@ -540,7 +597,8 @@ the gateway's `AcknowledgeMyAlert`.
   browser against `make up`.
 - `mcp-server` is a placeholder until Phase 6.
 - `home_storm_metrics.inflow_est_l`, `pump_rate_lps` and `pump_rate_source` are computed and stored but
-  not yet served by QueryService. `pump_rate_source = bucket_test` (a homeowner's measured rate) is
-  reserved; nothing records it yet.
+  not yet served by QueryService. The schema allows `pump_rate_source = bucket_test`, but no override
+  is implemented. The [bucket-test research report](research/pump-flow-bucket-test.md) proposes that a
+  measured pour calibrate the effective pit area instead; that is an owner decision.
 - Alert email goes to one operator address; per-owner email needs a decryption scheme for owner
   contacts (`prompt_plan.md` §14).

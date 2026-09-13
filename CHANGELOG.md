@@ -8,9 +8,10 @@ About (`web/src/about.ts`).
 ## [Unreleased]
 ### Added
 - storm-analytics: storm inflow estimate from each home's pump rate, calibrated on the dry-weather cycles baseflow uses (`inflow_est_l`, `pump_rate_lps`, `pump_rate_source`; migration 0006), stored beside the §9 pit-drop `volume_l`, which stays the floor. In the Phase 4 e2e the pump rate is within 5 % of the simulator's and `inflow_est_l` within 2.2 % of the true inflow (PR #9). Not yet served by the API.
+- Research report `docs/research/pump-flow-bucket-test.md`: what a homeowner bucket test can measure (mainly effective pit area) and proposals awaiting owner decisions (PR #10).
 
 ### Changed
-- Documentation: root README, architecture maps in `docs/README.md` (system, data flow, data model, repository layout, API), CLAUDE.md, progress, this changelog and the in-app About data brought in line with the code.
+- Documentation: root README, architecture maps in `docs/README.md` (system, data flow, data model, repository layout, API, operations runbook), CLAUDE.md, progress, this changelog and the in-app About data brought in line with the code.
 
 ### Fixed
 - api-gateway: after a Clerk signing-key rotation, tokens signed with the new key were rejected until the hourly JWKS refresh. The refresh on an unknown key ID now has a 10 s budget instead of 1 ms (PR #8).

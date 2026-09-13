@@ -13,7 +13,7 @@ sumpnet is a neighbourhood sump-pump and drainage monitoring platform (pilot: Ti
 - Work proceeds in phases (§12 of `prompt_plan.md`). **Don't start a phase until the previous phase's acceptance criteria pass.** Tick the checkboxes in `prompt_plan.md` as items land.
 - Update `progress.md` at the end of every session: the Status table plus a session entry, newest first. Add user-visible changes to `CHANGELOG.md` and to the in-app copy in `web/src/about.ts` (changelog and roadmap).
 - Record significant decisions as ADRs in `docs/adr/` (0001–0007 so far) and add each one to `docs/adr/README.md`.
-- Resolve open questions in §14 with the user; don't pick an answer silently (still open: gateway sites, simulator calibration before public numbers, licence, per-owner alert email).
+- Resolve open questions in §14 with the user; don't pick an answer silently (still open: gateway sites, simulator calibration before public numbers, licence, per-owner alert email, and the bucket-test proposals in `docs/research/pump-flow-bucket-test.md`, chiefly whether a bucket test calibrates pit area instead of overriding the pump rate).
 - When services, tables, ports or routes change, update the maps together. The Mermaid system diagram is identical in `README.md` and `docs/README.md`. The ASCII diagram below matches `prompt_plan.md` §3. The data-flow and ER diagrams live in `docs/README.md`. The repository layout is in `docs/README.md` and `prompt_plan.md` §6. The ports tables are in `README.md`, `docs/README.md` and the Ports section below.
 
 ## Commands
@@ -63,6 +63,14 @@ Breaking-change check locally: `./bin/buf breaking --against '.git#branch=main'`
 CI (`.github/workflows/ci.yml`) jobs: `buf` (lint, format, breaking on PRs, `gen/` drift), `lint` (golangci-lint, formatters, `sqlc diff`), `test` (`go mod verify`, build, `go test -race`), `test-integration`, `web` (`npm ci`, lint, test, build on Node 24), `compose-config`, and `docker` (build matrix over the ten services, no push). Tool versions come from `.versions.env`. When you add a Makefile target or CI job, update this section.
 
 Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/compose/docker-compose.yml` (the Makefile adds it). `docker compose down -v` wipes both the sumpnet and chirpstack databases — they share one Postgres. A one-shot `migrate` service applies `migrations/` first; every service that opens the database checks the schema version at startup and refuses to run on a stale one.
+
+## Operations notes (verified on the live stack, 2026-09-12)
+
+- Demo: `make up`; `make seed SEED=42 HOMES=60`; `make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0`; `make web-install && make web-dev`. Seed and sim need the same `SEED` and `HOMES`, or the simulated devices stay unlinked. Expect the simulated 50 mm storm plus any real ECCC storm the poller fetched.
+- Replays raise an OFFLINE alert per device: the sweep is wall clock and compose hard-codes `ALERTS_OFFLINE_AFTER: 1h`. Expected; don't change it without asking.
+- storm-analytics does not backfill columns a migration adds. Stop it, run `update consumer_watermarks set inserted_at='2000-01-01' where consumer='storm-analytics' and source='cycle_events'`, then start it. Rewinding only the `rainfall` watermark is not enough. Runbook: `docs/README.md`.
+- Sim home 9 (~500 dry-weather cycles/day) never gets a baseflow; its NULL lag, recession and pump rate are by design.
+- No Clerk values: the gateway logs `auth:false` and the dashboard shows public views only.
 
 ## Ingest path invariants
 

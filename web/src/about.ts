@@ -101,9 +101,12 @@ export const ROADMAP: RoadmapGroup[] = [
     ],
   },
   {
-    category: 'Research',
+    category: 'Proposed (owner decision pending)',
     items: [
-      { title: 'Bucket test: pour a known volume into the pit to measure a pump’s flow rate', priority: 'medium' },
+      { title: 'Bucket test measures each pit’s real size, instead of setting the pump rate', priority: 'high' },
+      { title: 'Guided pump calibration in the dashboard', priority: 'medium' },
+      { title: 'Warnings for a failing check valve or a weakening pump', priority: 'medium' },
+      { title: 'Calibration mode and finer level sampling on the node', priority: 'low' },
     ],
   },
   {

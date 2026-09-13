@@ -17,7 +17,7 @@ As of 2026-09-12. Session entries below, newest first, hold the details and acce
 | 8 — AWS + load test | not started |
 | 9 — Pilot | not started |
 
-In flight: homeowner bucket-test research (measuring pump flow rate by pouring a known volume into the pit); the Phase 5 live map check; docs refresh on `docs/refresh`. Not done yet: serving `inflow_est_l` through QueryService.
+In flight: the Phase 5 live map check; docs refresh on `docs/refresh`. Awaiting owner decisions: the bucket-test research proposals (PR #10, `docs/research/pump-flow-bucket-test.md`), chiefly whether a bucket test calibrates pit area instead of overriding the pump rate. Not done yet: serving `inflow_est_l` through QueryService.
 
 ## Session log (newest first)
 
@@ -31,8 +31,8 @@ In flight: homeowner bucket-test research (measuring pump flow rate by pouring a
   `contracts/phase-4-5`.
 - **Merges:** PR #4 (Phase 3), #5 (contracts), #6 (Phase 5) and #7 (Phase 4) merged on the owner's
   instruction. Main was merged into `phase-4/weather` first; conflicts in README, ADR index, progress
-  and sqlcgen were resolved (sqlc regenerated). PR #8 (JWKS fix) and PR #9 (pump-rate inflow estimate,
-  entry below) followed the same evening.
+  and sqlcgen were resolved (sqlc regenerated). PR #8 (JWKS fix), PR #9 (pump-rate inflow estimate,
+  entry below) and PR #10 (bucket-test research report) followed the same evening.
 - **Owner decisions:** rain gauge uplink = fPort 5, 11 B, cumulative tip counter; owner auth = Clerk;
   Phase 4 lag tolerance "±10 % or 15 min, whichever is larger, median ≤ 5 min" approved as built
   (recession stays strict ±10 %); storm volume keeps the §9 pit-drop floor and adds a pump-rate inflow
@@ -41,12 +41,24 @@ In flight: homeowner bucket-test research (measuring pump flow rate by pouring a
   with the new key until the hourly JWKS refresh. jwkset reuses the `RateLimitWaitMax` context for the
   refresh request, and it was 1 ms; it is now 10 s (the HTTP timeout). New
   `TestKeyRotationWithSlowJWKS`; `-race -count=30` green.
-- **In flight:** a research report on the homeowner bucket test for measuring pump flow rate (the
-  source `bucket_test` is reserved for it); the Phase 5 browser check of a live storm replay against
-  `make up`. Not done yet: serving `inflow_est_l` through QueryService.
+- **Research (PR #10):** `docs/research/pump-flow-bucket-test.md`. Pouring a bucket into the pit and
+  timing the pump does not by itself measure flow rate; a measured pour mainly calibrates the pit's
+  effective area. The level sensor is ultrasonic (JSN-SR04T), not optical. Proposals P1–P9 (calibrate
+  area rather than override `pump_rate_lps`; hardware notes, payload definitions, data model, analytics,
+  firmware, dashboard wizard, simulator, §14 questions) await owner decisions.
+- **Live stack (main session):** `make up`, `make seed SEED=42 HOMES=60`,
+  `make sim SCENARIO=storm50-long SEED=42 HOMES=60 SPEED=0` gave two closed storms: the simulated 50 mm
+  gauge storm with metrics for 60 homes, and a real 13.5 mm ECCC storm (2026-09-09) the poller fetched
+  live. The replay raised an OFFLINE alert per device (wall-clock sweep, `ALERTS_OFFLINE_AFTER: 1h` in
+  compose). storm-analytics did not backfill migration 0006's columns: rewinding only its `rainfall`
+  watermark was not enough, while stopping it and rewinding its `cycle_events` watermark filled 59 of
+  60 homes. Sim home 9 cycles ~500 times a day in dry weather, so it has no baseflow and its lag,
+  recession and pump rate stay NULL. With no Clerk values the gateway logs `auth:false`.
+- **In flight:** the Phase 5 browser check of a live storm replay against `make up`. Not done yet:
+  serving `inflow_est_l` through QueryService.
 - **Docs refresh (`docs/refresh`):** root README (Mermaid architecture, quickstart, ports, status,
   load-test placeholder, "at 1M devices"), `docs/README.md` maps (system, data flow, ER model, layout,
-  API, privacy, deployment), CLAUDE.md commands/ports/invariants, this Status table, CHANGELOG 0.4.0 and
+  API, privacy, deployment, operations runbook), CLAUDE.md commands/ports/invariants/operations, this Status table, CHANGELOG 0.4.0 and
   the in-app About data, `prompt_plan.md` §3/§6/§7/§8/§11/§12/§14.
 
 ### 2026-09-12 (Phase 4 follow-up: owner decisions)
