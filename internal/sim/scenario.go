@@ -85,6 +85,20 @@ func Scenarios() map[string]*Scenario {
 		},
 		storm50,
 		{
+			Name:        "storm25-long",
+			Description: "storm25's burst after a 3-day dry lead (baseflow history) with a 3-day recession tail; a Phase 4 acceptance scenario",
+			Duration:    6 * 24 * time.Hour,
+			Rain:        burstShape.Normalised(25).Shifted(72 * time.Hour),
+			RainJitter:  0.05,
+		},
+		{
+			Name:        "storm50-long",
+			Description: "storm50's 6 h storm after a 3-day dry lead (baseflow history) with a 3-day recession tail; a Phase 4 acceptance scenario",
+			Duration:    6 * 24 * time.Hour,
+			Rain:        longShape.Normalised(50).Shifted(72 * time.Hour),
+			RainJitter:  0.05,
+		},
+		{
 			Name:        "thaw50",
 			Description: "Spring thaw: 72 h dry lead at a high water table, then 12 h of steady rain (48 mm) and a 2 mm shower",
 			Duration:    108 * time.Hour,

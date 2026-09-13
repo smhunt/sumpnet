@@ -138,7 +138,14 @@ func (h *readingHandler) Handle(ctx context.Context, _ pgx.Tx, q *sqlcgen.Querie
 			}
 			switch {
 			case hydrology.LevelRising(dists, e.cfg.RiseMinMM):
-				msg := fmt.Sprintf("Mains lost and the pit level rose %d mm over the last %d readings (rainfall check arrives in Phase 4)", dists[0]-dists[len(dists)-1], len(dists))
+				rain, err := e.rainTerm(ctx, q, r.Ts)
+				if err != nil {
+					return err
+				}
+				if !rain.holds() {
+					break // the rainfall record covers the last 6 h and shows none
+				}
+				msg := fmt.Sprintf("Mains lost and the pit level rose %d mm over the last %d readings; %s", dists[0]-dists[len(dists)-1], len(dists), rain)
 				if _, err := e.Raise(ctx, q, dev, alertsv1.AlertCode_ALERT_CODE_OUTAGE_RISK, r.Ts, "heartbeat", key, msg); err != nil {
 					return err
 				}
@@ -151,6 +158,36 @@ func (h *readingHandler) Handle(ctx context.Context, _ pgx.Tx, q *sqlcgen.Querie
 	}
 	e.refreshOpenGauge(ctx, q)
 	return nil
+}
+
+// rainCheck is the §10 outage-risk rain term for one reading.
+type rainCheck struct {
+	mm      float64       // rain recorded by any source in the window
+	covered bool          // rainfall data reach within the coverage slack of the reading
+	window  time.Duration // RainWindow
+}
+
+// holds reports whether the rain term is satisfied: rain was recorded, or no
+// rainfall data cover the reading's time (the weather feed is lagging or not
+// configured, or ECCC has not published the hour yet). A missing feed must
+// never hide an outage risk; only a record that covers the window and shows
+// no rain suppresses the alert.
+func (c rainCheck) holds() bool { return c.mm > 0 || !c.covered }
+
+func (c rainCheck) String() string {
+	if !c.covered {
+		return fmt.Sprintf("no rainfall data cover the last %s, so rain is assumed", c.window)
+	}
+	return fmt.Sprintf("%.1f mm of rain in the last %s", c.mm, c.window)
+}
+
+// rainTerm reads rainfall (gauges and ECCC alike) for (at − RainWindow, at).
+func (e *Engine) rainTerm(ctx context.Context, q *sqlcgen.Queries, at time.Time) (rainCheck, error) {
+	row, err := q.RainNear(ctx, sqlcgen.RainNearParams{ScanFrom: at.Add(-e.cfg.RainWindow - 24*time.Hour), FromTs: at.Add(-e.cfg.RainWindow), ToTs: at})
+	if err != nil {
+		return rainCheck{}, fmt.Errorf("rain near %s: %w", at.Format(time.RFC3339), err)
+	}
+	return rainCheck{mm: row.Mm, covered: !row.CoveredUntil.Before(at.Add(-e.cfg.RainCoverageSlack)), window: e.cfg.RainWindow}, nil
 }
 
 // samples appends the reading to the device's recent level samples, seeding

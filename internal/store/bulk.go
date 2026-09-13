@@ -51,14 +51,16 @@ type table struct {
 	cols        []string
 	timeCol     string
 	partitioned bool
+	kind        string // devices.kind given to auto-registered senders
 }
 
 var (
-	tReadings       = table{"readings", "readings_stage", readingCols, "ts", true}
-	tCycleEvents    = table{"cycle_events", "cycle_events_stage", cycleEventCols, "started_at", true}
-	tStormSummaries = table{"storm_summaries", "storm_summaries_stage", stormSummaryCols, "window_end", false}
-	tAlarmEvents    = table{"alarm_events", "alarm_events_stage", alarmEventCols, "raised_at", false}
-	allTables       = []table{tReadings, tCycleEvents, tStormSummaries, tAlarmEvents}
+	tReadings         = table{"readings", "readings_stage", readingCols, "ts", true, "house"}
+	tCycleEvents      = table{"cycle_events", "cycle_events_stage", cycleEventCols, "started_at", true, "house"}
+	tStormSummaries   = table{"storm_summaries", "storm_summaries_stage", stormSummaryCols, "window_end", false, "house"}
+	tAlarmEvents      = table{"alarm_events", "alarm_events_stage", alarmEventCols, "raised_at", false, "house"}
+	tRainGaugeUplinks = table{"rain_gauge_uplinks", "rain_gauge_uplinks_stage", rainGaugeUplinkCols, "ts", true, "rain"}
+	allTables         = []table{tReadings, tCycleEvents, tStormSummaries, tAlarmEvents, tRainGaugeUplinks}
 )
 
 // createStagingTables runs once per pooled connection: session-scoped temp
@@ -114,6 +116,16 @@ func (s *Store) InsertAlarmEvents(ctx context.Context, rows []AlarmEvent) (Resul
 	return s.insert(ctx, tAlarmEvents, vals, times)
 }
 
+// InsertRainGaugeUplinks stores a batch of fPort 5 rain gauge reports.
+func (s *Store) InsertRainGaugeUplinks(ctx context.Context, rows []RainGaugeUplink) (Result, error) {
+	vals := make([][]any, len(rows))
+	times := make([]time.Time, len(rows))
+	for i, r := range rows {
+		vals[i], times[i] = r.values(), r.TS
+	}
+	return s.insert(ctx, tRainGaugeUplinks, vals, times)
+}
+
 // insert is the shared bulk path: ensure partitions → COPY into the staging
 // table → register devices → INSERT … ON CONFLICT DO NOTHING → NOTIFY.
 func (s *Store) insert(ctx context.Context, t table, vals [][]any, times []time.Time) (Result, error) {
@@ -154,11 +166,13 @@ func (s *Store) insert(ctx context.Context, t table, vals [][]any, times []time.
 
 	var res Result
 	if s.autoRegister {
+		// A new sender is registered with the table's device kind; an existing
+		// device keeps whatever kind an operator gave it.
 		_, err = tx.Exec(ctx, fmt.Sprintf(`
-			INSERT INTO devices (dev_eui, last_seen_at)
-			SELECT device_id, max(%s) FROM %s GROUP BY device_id
+			INSERT INTO devices (dev_eui, kind, last_seen_at)
+			SELECT device_id, $1, max(%s) FROM %s GROUP BY device_id
 			ON CONFLICT (dev_eui) DO UPDATE
-			  SET last_seen_at = GREATEST(devices.last_seen_at, EXCLUDED.last_seen_at)`, t.timeCol, t.stage))
+			  SET last_seen_at = GREATEST(devices.last_seen_at, EXCLUDED.last_seen_at)`, t.timeCol, t.stage), t.kind)
 		if err != nil {
 			return Result{}, fmt.Errorf("store: register devices: %w", err)
 		}

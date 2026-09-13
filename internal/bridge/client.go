@@ -110,6 +110,16 @@ func (c *Client) SubmitAlarms(ctx context.Context, rows []*telemetryv1.Alarm) (C
 	})
 }
 
+// SubmitRainGaugeReadings sends rain gauge reports.
+func (c *Client) SubmitRainGaugeReadings(ctx context.Context, rows []*telemetryv1.RainGaugeReading) (Counts, error) {
+	reqs := chunked(rows, c.chunk, func(part []*telemetryv1.RainGaugeReading) *telemetryv1.SubmitRainGaugeReadingsRequest {
+		return &telemetryv1.SubmitRainGaugeReadingsRequest{RainGaugeReadings: part}
+	})
+	return submit(ctx, c, "rain_gauge_uplinks", c.c.SubmitRainGaugeReadings, reqs, func(r *telemetryv1.SubmitRainGaugeReadingsResponse) Counts {
+		return Counts{r.GetAccepted(), r.GetDuplicates()}
+	})
+}
+
 func chunked[T any, Req any](rows []T, n int, wrap func([]T) Req) []Req {
 	var out []Req
 	for i := 0; i < len(rows); i += n {

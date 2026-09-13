@@ -213,8 +213,9 @@ func TestOutageRiskAndBattery(t *testing.T) {
 	if !ok || !or.RaisedAt.Equal(base.Add(45*time.Minute)) || or.Severity != 3 || !or.ResolvedAt.Valid || !or.ResolvedAt.Time.Equal(base.Add(75*time.Minute)) || or.ResolveReason.String != "level falling" {
 		t.Fatalf("OUTAGE_RISK = %+v", or)
 	}
-	if !strings.Contains(or.Message, "Phase 4") {
-		t.Errorf("message should mention the deferred rain check: %q", or.Message)
+	// No rainfall data at all: the rain term is assumed, never a reason to stay silent.
+	if !strings.Contains(or.Message, "no rainfall data cover the last 6h0m0s, so rain is assumed") {
+		t.Errorf("message should say rain was assumed: %q", or.Message)
 	}
 	lb, ok := byCode[int16(alertsv1.AlertCode_ALERT_CODE_LOW_BATTERY)]
 	if !ok || !lb.RaisedAt.Equal(base.Add(45*time.Minute)) || !lb.ResolvedAt.Valid || lb.ResolveReason.String != "battery recovered" {
@@ -222,6 +223,63 @@ func TestOutageRiskAndBattery(t *testing.T) {
 	}
 	if len(byCode) != 3 {
 		t.Fatalf("unexpected alerts: %+v", byCode)
+	}
+}
+
+func TestOutageRiskRainTerm(t *testing.T) {
+	h := setup(t, nil)
+	ctx := context.Background()
+	q := h.st.Queries()
+	hour := func(at time.Duration, mm float64) {
+		t.Helper()
+		if _, err := q.UpsertRainfall(ctx, sqlcgen.UpsertRainfallParams{Source: "eccc", StationID: "6144478", Ts: base.Add(at), IntervalS: 3600, Mm: mm}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Dry, recorded hours from 6 h before the first outage to 2 h after it.
+	for at := -6 * time.Hour; at < 2*time.Hour; at += time.Hour {
+		hour(at, 0)
+	}
+	// Then rain during the second outage: 2.4 mm in 03:00–04:00 (relative to base).
+	for at := 2 * time.Hour; at < 6*time.Hour; at += time.Hour {
+		mm := 0.0
+		if at == 3*time.Hour {
+			mm = 2.4
+		}
+		hour(at, mm)
+	}
+	rising := func(dev string, from time.Duration, fcnt int64) []store.Reading {
+		return []store.Reading{
+			reading(dev, from, fcnt, 500, false, false, 4000),
+			reading(dev, from+15*time.Minute, fcnt+1, 490, false, false, 3950),
+			reading(dev, from+30*time.Minute, fcnt+2, 470, false, false, 3900),
+			reading(dev, from+45*time.Minute, fcnt+3, 500, true, false, 4100),
+		}
+	}
+	rows := append(rising(devB, 15*time.Minute, 1), rising(devA, 4*time.Hour+15*time.Minute, 1)...)
+	if _, err := h.st.InsertReadings(ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	h.round(t)
+	codes := func(dev string) map[int16]sqlcgen.Alert {
+		m := map[int16]sqlcgen.Alert{}
+		for _, a := range h.alerts(t, dev) {
+			m[a.Code] = a
+		}
+		return m
+	}
+	risk := int16(alertsv1.AlertCode_ALERT_CODE_OUTAGE_RISK)
+	dry := codes(devB)
+	if _, ok := dry[risk]; ok {
+		t.Errorf("OUTAGE_RISK raised although the rainfall record shows no rain in the last 6 h: %+v", dry[risk])
+	}
+	if _, ok := dry[int16(alertsv1.AlertCode_ALERT_CODE_MAINS_LOST)]; !ok {
+		t.Error("MAINS_LOST must still be raised")
+	}
+	wet := codes(devA)
+	or, ok := wet[risk]
+	if !ok || !or.RaisedAt.Equal(base.Add(4*time.Hour+45*time.Minute)) || !strings.Contains(or.Message, "2.4 mm of rain in the last 6h0m0s") {
+		t.Errorf("OUTAGE_RISK with rain = %+v", or)
 	}
 }
 

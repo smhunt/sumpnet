@@ -18,8 +18,13 @@ type Querier interface {
 	CountCycleEvents(ctx context.Context) (int64, error)
 	CountOpenAlertsByCode(ctx context.Context) ([]CountOpenAlertsByCodeRow, error)
 	CountOpenAlertsForHome(ctx context.Context, homeID uuid.NullUUID) (int64, error)
+	CountRainGaugeUplinks(ctx context.Context) (int64, error)
 	CountReadings(ctx context.Context) (int64, error)
 	CountStormSummaries(ctx context.Context) (int64, error)
+	DeleteHomeStormMetrics(ctx context.Context, arg DeleteHomeStormMetricsParams) error
+	// Removes a station's rows in [from_ts, to_ts) that a re-derivation no longer produces.
+	DeleteRainfallExcept(ctx context.Context, arg DeleteRainfallExceptParams) (int64, error)
+	DeleteStormEvent(ctx context.Context, id uuid.UUID) error
 	// Rows and highest frame counter per device across every telemetry table;
 	// with contiguous counters rows == max_f_cnt + 1.
 	FCntStatsByDevice(ctx context.Context) ([]FCntStatsByDeviceRow, error)
@@ -37,6 +42,7 @@ type Querier interface {
 	GetHomeLatestBaseflow(ctx context.Context, homeID uuid.UUID) (float64, error)
 	// Newest heartbeat across the home's house devices.
 	GetHomeLatestReading(ctx context.Context, homeID uuid.NullUUID) (GetHomeLatestReadingRow, error)
+	GetLinkedHouseDevice(ctx context.Context, devEui string) (GetLinkedHouseDeviceRow, error)
 	// The alerts service is the single writer of this table.
 	GetOpenAlert(ctx context.Context, arg GetOpenAlertParams) (Alert, error)
 	GetOwnedHome(ctx context.Context, arg GetOwnedHomeParams) (Home, error)
@@ -44,6 +50,7 @@ type Querier interface {
 	GetWatermark(ctx context.Context, arg GetWatermarkParams) (time.Time, error)
 	InsertAlert(ctx context.Context, arg InsertAlertParams) (Alert, error)
 	InsertDetection(ctx context.Context, arg InsertDetectionParams) (int64, error)
+	InsertStormEvent(ctx context.Context, arg InsertStormEventParams) (uuid.UUID, error)
 	// The newest inserted_at a poller may read: now() minus the lag that covers
 	// in-flight ingest transactions. Computed in SQL so only the DB clock matters.
 	LagBoundary(ctx context.Context, lagSeconds float64) (time.Time, error)
@@ -54,16 +61,25 @@ type Querier interface {
 	// Alert rows on homes that changed after @after; routed to owners only.
 	ListAlertsChangedSince(ctx context.Context, after time.Time) ([]ListAlertsChangedSinceRow, error)
 	ListAlertsForDevice(ctx context.Context, deviceID string) ([]Alert, error)
+	ListCycleEventsForDevice(ctx context.Context, arg ListCycleEventsForDeviceParams) ([]ListCycleEventsForDeviceRow, error)
 	ListCyclesBefore(ctx context.Context, arg ListCyclesBeforeParams) ([]CycleEvent, error)
 	ListDetections(ctx context.Context, deviceID string) ([]Detection, error)
 	ListDevices(ctx context.Context) ([]Device, error)
 	ListHomeDevices(ctx context.Context, homeID uuid.NullUUID) ([]Device, error)
+	ListHomeMetricsForStorm(ctx context.Context, stormID uuid.UUID) ([]HomeStormMetric, error)
 	ListHomeStormMetrics(ctx context.Context, arg ListHomeStormMetricsParams) ([]ListHomeStormMetricsRow, error)
+	ListLevelsForDevice(ctx context.Context, arg ListLevelsForDeviceParams) ([]ListLevelsForDeviceRow, error)
+	// House nodes linked to a home; last_seen_at is the newest event time ingest saw.
+	ListLinkedHouseDevices(ctx context.Context) ([]ListLinkedHouseDevicesRow, error)
 	ListOwnedHomes(ctx context.Context, authSubject string) ([]Home, error)
 	ListOwnerActiveAlerts(ctx context.Context, arg ListOwnerActiveAlertsParams) ([]ListOwnerActiveAlertsRow, error)
 	ListOwnersOfHomes(ctx context.Context, homeIds []uuid.UUID) ([]ListOwnersOfHomesRow, error)
 	ListPendingRaiseNotifications(ctx context.Context, arg ListPendingRaiseNotificationsParams) ([]ListPendingRaiseNotificationsRow, error)
 	ListPendingResolveNotifications(ctx context.Context, arg ListPendingResolveNotificationsParams) ([]ListPendingResolveNotificationsRow, error)
+	ListRainGaugeUplinks(ctx context.Context, arg ListRainGaugeUplinksParams) ([]RainGaugeUplink, error)
+	// Intervals overlapping [from_ts, to_ts); scan_from bounds the index scan
+	// (no interval is longer than from_ts - scan_from).
+	ListRainfall(ctx context.Context, arg ListRainfallParams) ([]ListRainfallRow, error)
 	ListReadingsBefore(ctx context.Context, arg ListReadingsBeforeParams) ([]Reading, error)
 	ListReadingsForDevice(ctx context.Context, arg ListReadingsForDeviceParams) ([]Reading, error)
 	// Open storms plus the most recent ones, for a WatchNeighbourhood snapshot.
@@ -71,10 +87,13 @@ type Querier interface {
 	// Devices silent longer than the given number of seconds (wall clock).
 	ListStaleDevices(ctx context.Context, afterSeconds float64) ([]ListStaleDevicesRow, error)
 	ListStormEventsChangedSince(ctx context.Context, after time.Time) ([]StormEvent, error)
+	// Storms whose [started_at, ended_at] meets [from_ts, to_ts); open storms reach forward indefinitely.
+	ListStormEventsOverlapping(ctx context.Context, arg ListStormEventsOverlappingParams) ([]StormEvent, error)
 	// Newest first, keyset-paged on (started_at, id).
 	ListStormEventsPage(ctx context.Context, arg ListStormEventsPageParams) ([]StormEvent, error)
 	// Input to privacy.AggregateStorm only; never returned to a caller as rows.
 	ListStormHomeMetrics(ctx context.Context, stormID uuid.UUID) ([]ListStormHomeMetricsRow, error)
+	ListStormSummariesForDevice(ctx context.Context, arg ListStormSummariesForDeviceParams) ([]ListStormSummariesForDeviceRow, error)
 	MarkRaiseNotification(ctx context.Context, arg MarkRaiseNotificationParams) error
 	MarkResolveNotification(ctx context.Context, arg MarkResolveNotificationParams) error
 	// The event-time "now" of the neighbourhood: the newest event from a linked
@@ -89,8 +108,22 @@ type Querier interface {
 	// and to the lag boundary.
 	PollCycleEvents(ctx context.Context, arg PollCycleEventsParams) ([]CycleEvent, error)
 	PollDetections(ctx context.Context, arg PollDetectionsParams) ([]Detection, error)
+	// Phase 4 weather service: rain-gauge uplinks → rainfall, ECCC rainfall, and
+	// rainfall reads for storm-analytics and the alerts outage-risk rule.
+	PollRainGaugeUplinks(ctx context.Context, arg PollRainGaugeUplinksParams) ([]RainGaugeUplink, error)
+	// Phase 4 storm-analytics: storm_events and home_storm_metrics maintenance.
+	// storm-analytics is the single writer of both tables.
+	// Polled by updated_at (see migration 0005): rewrites must reach the consumer.
+	PollRainfall(ctx context.Context, arg PollRainfallParams) ([]Rainfall, error)
 	PollReadings(ctx context.Context, arg PollReadingsParams) ([]Reading, error)
 	PollStormSummaries(ctx context.Context, arg PollStormSummariesParams) ([]StormSummary, error)
+	RainGaugeUplinkAfter(ctx context.Context, arg RainGaugeUplinkAfterParams) (RainGaugeUplink, error)
+	RainGaugeUplinkBefore(ctx context.Context, arg RainGaugeUplinkBeforeParams) (RainGaugeUplink, error)
+	// Rain recorded by any source in intervals overlapping [from_ts, to_ts), and
+	// how far the data reach before to_ts (the outage-risk rain term).
+	RainNear(ctx context.Context, arg RainNearParams) (RainNearRow, error)
+	// End of the newest interval of a source: how far its data reach.
+	RainfallCoveredUntil(ctx context.Context, arg RainfallCoveredUntilParams) (time.Time, error)
 	// Backfill after an operator links a device to a home with a pit area.
 	RecomputeCycleVolumes(ctx context.Context, devEui string) (int64, error)
 	ResolveOpenAlert(ctx context.Context, arg ResolveOpenAlertParams) (Alert, error)
@@ -110,8 +143,12 @@ type Querier interface {
 	// Sources are consumed at different watermark positions, so the same episode
 	// can be observed out of event-time order: raised_at is the earliest trigger.
 	TouchAlert(ctx context.Context, arg TouchAlertParams) error
+	UpdateStormEvent(ctx context.Context, arg UpdateStormEventParams) error
 	UpsertDevice(ctx context.Context, arg UpsertDeviceParams) (Device, error)
 	UpsertHome(ctx context.Context, arg UpsertHomeParams) (Home, error)
+	UpsertHomeStormMetrics(ctx context.Context, arg UpsertHomeStormMetricsParams) error
+	// Only an insert or a real change bumps updated_at, which storm-analytics polls.
+	UpsertRainfall(ctx context.Context, arg UpsertRainfallParams) (int64, error)
 	// An empty kind means 'standard' so callers that predate segments.kind keep working.
 	UpsertSegment(ctx context.Context, arg UpsertSegmentParams) error
 }

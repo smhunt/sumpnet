@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IngestService_SubmitReadings_FullMethodName    = "/sumpnet.telemetry.v1.IngestService/SubmitReadings"
-	IngestService_SubmitCycleEvents_FullMethodName = "/sumpnet.telemetry.v1.IngestService/SubmitCycleEvents"
-	IngestService_SubmitAlarms_FullMethodName      = "/sumpnet.telemetry.v1.IngestService/SubmitAlarms"
+	IngestService_SubmitReadings_FullMethodName          = "/sumpnet.telemetry.v1.IngestService/SubmitReadings"
+	IngestService_SubmitCycleEvents_FullMethodName       = "/sumpnet.telemetry.v1.IngestService/SubmitCycleEvents"
+	IngestService_SubmitAlarms_FullMethodName            = "/sumpnet.telemetry.v1.IngestService/SubmitAlarms"
+	IngestService_SubmitRainGaugeReadings_FullMethodName = "/sumpnet.telemetry.v1.IngestService/SubmitRainGaugeReadings"
 )
 
 // IngestServiceClient is the client API for IngestService service.
@@ -29,7 +30,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // IngestService receives decoded uplinks from the bridges (lora-bridge for
-// ChirpStack, mqtt-bridge for the legacy Photon node). Messages carry SI units
+// ChirpStack, mqtt-bridge for Wi-Fi nodes). Messages carry SI units
 // and enums; the byte-level wire encoding lives in internal/codec and the
 // bridge converts between the two. Internal only: no HTTP bindings.
 type IngestServiceClient interface {
@@ -38,6 +39,9 @@ type IngestServiceClient interface {
 	// cycle aggregates the node rolled up in storm mode.
 	SubmitCycleEvents(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SubmitCycleEventsRequest, SubmitCycleEventsResponse], error)
 	SubmitAlarms(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SubmitAlarmsRequest, SubmitAlarmsResponse], error)
+	// Rain gauge uplinks (fPort 5), stored raw; the weather service derives
+	// rainfall from consecutive tip counters.
+	SubmitRainGaugeReadings(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse], error)
 }
 
 type ingestServiceClient struct {
@@ -87,12 +91,25 @@ func (c *ingestServiceClient) SubmitAlarms(ctx context.Context, opts ...grpc.Cal
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IngestService_SubmitAlarmsClient = grpc.ClientStreamingClient[SubmitAlarmsRequest, SubmitAlarmsResponse]
 
+func (c *ingestServiceClient) SubmitRainGaugeReadings(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IngestService_ServiceDesc.Streams[3], IngestService_SubmitRainGaugeReadings_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IngestService_SubmitRainGaugeReadingsClient = grpc.ClientStreamingClient[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]
+
 // IngestServiceServer is the server API for IngestService service.
 // All implementations must embed UnimplementedIngestServiceServer
 // for forward compatibility.
 //
 // IngestService receives decoded uplinks from the bridges (lora-bridge for
-// ChirpStack, mqtt-bridge for the legacy Photon node). Messages carry SI units
+// ChirpStack, mqtt-bridge for Wi-Fi nodes). Messages carry SI units
 // and enums; the byte-level wire encoding lives in internal/codec and the
 // bridge converts between the two. Internal only: no HTTP bindings.
 type IngestServiceServer interface {
@@ -101,6 +118,9 @@ type IngestServiceServer interface {
 	// cycle aggregates the node rolled up in storm mode.
 	SubmitCycleEvents(grpc.ClientStreamingServer[SubmitCycleEventsRequest, SubmitCycleEventsResponse]) error
 	SubmitAlarms(grpc.ClientStreamingServer[SubmitAlarmsRequest, SubmitAlarmsResponse]) error
+	// Rain gauge uplinks (fPort 5), stored raw; the weather service derives
+	// rainfall from consecutive tip counters.
+	SubmitRainGaugeReadings(grpc.ClientStreamingServer[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]) error
 	mustEmbedUnimplementedIngestServiceServer()
 }
 
@@ -119,6 +139,9 @@ func (UnimplementedIngestServiceServer) SubmitCycleEvents(grpc.ClientStreamingSe
 }
 func (UnimplementedIngestServiceServer) SubmitAlarms(grpc.ClientStreamingServer[SubmitAlarmsRequest, SubmitAlarmsResponse]) error {
 	return status.Error(codes.Unimplemented, "method SubmitAlarms not implemented")
+}
+func (UnimplementedIngestServiceServer) SubmitRainGaugeReadings(grpc.ClientStreamingServer[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]) error {
+	return status.Error(codes.Unimplemented, "method SubmitRainGaugeReadings not implemented")
 }
 func (UnimplementedIngestServiceServer) mustEmbedUnimplementedIngestServiceServer() {}
 func (UnimplementedIngestServiceServer) testEmbeddedByValue()                       {}
@@ -162,6 +185,13 @@ func _IngestService_SubmitAlarms_Handler(srv interface{}, stream grpc.ServerStre
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type IngestService_SubmitAlarmsServer = grpc.ClientStreamingServer[SubmitAlarmsRequest, SubmitAlarmsResponse]
 
+func _IngestService_SubmitRainGaugeReadings_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IngestServiceServer).SubmitRainGaugeReadings(&grpc.GenericServerStream[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IngestService_SubmitRainGaugeReadingsServer = grpc.ClientStreamingServer[SubmitRainGaugeReadingsRequest, SubmitRainGaugeReadingsResponse]
+
 // IngestService_ServiceDesc is the grpc.ServiceDesc for IngestService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -183,6 +213,11 @@ var IngestService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubmitAlarms",
 			Handler:       _IngestService_SubmitAlarms_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "SubmitRainGaugeReadings",
+			Handler:       _IngestService_SubmitRainGaugeReadings_Handler,
 			ClientStreams: true,
 		},
 	},

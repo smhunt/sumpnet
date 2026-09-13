@@ -148,3 +148,29 @@ func (s *Server) alarmRow(a *telemetryv1.Alarm) (store.AlarmEvent, reject) {
 		Code: int16(code), Value: i32(a.GetValue()), Meta: meta,
 	}, ""
 }
+
+// maxMMPerTip is what rain_gauge_uplinks.mm_per_tip numeric(6,3) can hold.
+const maxMMPerTip = 999.999
+
+func (s *Server) rainGaugeRow(r *telemetryv1.RainGaugeReading) (store.RainGaugeUplink, reject) {
+	dev, received, meta, why := s.metaOf(r.GetMeta())
+	if why != "" {
+		return store.RainGaugeUplink{}, why
+	}
+	ts := received
+	if r.GetTs() != nil {
+		ts = r.GetTs().AsTime().UTC()
+		if ts.After(s.now().Add(s.cfg.MaxFuture)) {
+			return store.RainGaugeUplink{}, rejFuture
+		}
+	}
+	if mm := r.GetMmPerTip(); !(mm > 0) || mm > maxMMPerTip {
+		return store.RainGaugeUplink{}, rejBadValue
+	}
+	return store.RainGaugeUplink{
+		DeviceID: dev, TS: ts, FCnt: int64(r.GetMeta().GetFCnt()),
+		TipCount: int64(r.GetTipCount()), MMPerTip: r.GetMmPerTip(), IntervalS: i32(r.GetIntervalS()),
+		BattMV: i32(r.GetBattMv()), CounterReset: r.GetCounterReset(), SensorFault: r.GetSensorFault(),
+		Meta: meta,
+	}, ""
+}

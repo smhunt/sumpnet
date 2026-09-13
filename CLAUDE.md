@@ -65,7 +65,7 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - A bridge acknowledges an MQTT message only after ingest confirms the batch; a flush failure is fatal so the broker redelivers. Poison messages (undecodable) are acknowledged and counted in `sumpnet_bridge_drops_total{reason}`.
 - Unknown DevEUIs are auto-registered with `home_id NULL` (invisible to owner views/aggregates) unless `INGEST_AUTO_REGISTER=false`.
 
-## Consumer invariants (cycle-detector, alerts — ADR 0003)
+## Consumer invariants (cycle-detector, alerts, weather, storm-analytics — ADR 0003)
 
 - Consumers are `internal/watermark` stages: `LISTEN sumpnet_ingest` is only a hint; the poll by `inserted_at` watermark is the truth, and poll + writes + watermark commit together. `WATERMARK_LAG` must exceed the longest ingest transaction.
 - Every alert timestamp (`raised_at`, `resolved_at`, detection `observed_at`) is **event time**, never wall clock; the only wall-clock rule is the OFFLINE sweep (`ALERTS_OFFLINE_AFTER=0` disables it — required for replays and tests).
@@ -73,6 +73,15 @@ Compose lives in `deploy/compose/`; `docker compose` commands need `-f deploy/co
 - `cycle-detector` → `alerts` goes through the `detections` table (idempotent PK), never in-process.
 - §10 rules live in `internal/hydrology` (pure); storm-mode summaries carry the short-cycling test in aggregate (`SummaryShortCycling`).
 - Email: real provider SMTP from `.env` (`SMTP_HOST/PORT/USER/PASSWORD/FROM`, `ALERTS_TO`); empty `SMTP_HOST` = log only. The provider is **Resend** over SMTP (`smtp.resend.com`, port 465, user `resend`, password = Resend API key, `SMTP_FROM` on a Resend-verified domain). `SMTP_PASSWORD` is an API key — never commit `.env`, never paste it into chat. `make alerts-testmail` sends one delivery check. Tests use Mailpit via testcontainers, never real mail.
+
+## Weather and storm analytics invariants (ADR 0007)
+
+- fPort 5 uplinks are stored raw in `rain_gauge_uplinks`. `weather` is the single writer of `rainfall`: gauge rows from consecutive tip-count deltas (re-derived for the stretch an uplink touches; tips after an interval longer than the 5-min wake are placed in its last 5 min), ECCC rows from GeoMet (`rainfall.ts` = `UTC_DATE` − 1 h: the amount is for the hour ending at `UTC_DATE`). Writers bump `updated_at` only on a real change; `storm-analytics` polls `rainfall` by `updated_at`.
+- `storm-analytics` is the single writer of `storm_events` and `home_storm_metrics`. It keeps no state between polls: every stage re-segments the rain around the change, matches existing storms by onset-inside-storm (ids stay stable), recomputes affected homes, writes only changed rows and notifies `sumpnet_ingest` with table `storm_events`.
+- Own gauges are primary; an ECCC hour is used only where no gauge interval overlaps it. `WEATHER_ECCC_ENABLED=false` for replays and tests; tests never call api.weather.gc.ca (recorded pages in `internal/weather/testdata`).
+- §10 storm/baseflow/lag/recession live in `internal/hydrology` (pure). Acceptance compares `HomeStormTruth.lag_min` / `recession_min` (continuous truth); `lag_min_discrete` saturates below 24 cycles/day and is not a usable truth.
+- `sim.Config.RainGauges` defaults to 0 so existing stream hashes hold; the CLI (`-rain-gauges`) and `testpipeline.NewSim` use 2. Gauge events have `HomeIndex = -1` and `Kind = "rain"`.
+- OUTAGE_RISK rain term: rain recorded in the 6 h before the reading; rainfall data that do not reach within 30 min of it count as rain (a dead feed never hides the alert).
 
 ## Privacy invariants (ADR 0005)
 
@@ -104,7 +113,7 @@ mcp-server -> QueryService (never direct SQL)
 
 ## Invariants that span multiple components
 
-- **Payload decoding happens only in Go (`internal/codec`)**, never in ChirpStack JS codecs. Uplinks are binary and little-endian: fPort 1 heartbeat (10 B), 2 pump cycle (11 B), 3 alarm (3 B, confirmed), 4 storm-mode summary. The exact layouts are in §5 of the plan. Firmware (`firmware/`, PlatformIO on ESP32-S3 + SX1262) must encode byte-for-byte what the codec decodes, over LoRaWAN or the Wi-Fi/MQTT envelope in `docs/node-mqtt.md`. Keep golden byte-vector table tests as the shared contract, and change them together with firmware.
+- **Payload decoding happens only in Go (`internal/codec`)**, never in ChirpStack JS codecs. Uplinks are binary and little-endian: fPort 1 heartbeat (10 B), 2 pump cycle (11 B), 3 alarm (3 B, confirmed), 4 storm-mode summary, 5 rain gauge (11 B, cumulative tip counter). The exact layouts are in §5 of the plan. Firmware (`firmware/`, PlatformIO on ESP32-S3 + SX1262) must encode byte-for-byte what the codec decodes, over LoRaWAN or the Wi-Fi/MQTT envelope in `docs/node-mqtt.md`. Keep golden byte-vector table tests as the shared contract, and change them together with firmware.
 - **Ingest is idempotent** on `(device_id, ts, fcnt)`. It uses bounded channels for backpressure and batches inserts with `pgx.CopyFrom`.
 - **Privacy:** data is opt-in, device IDs are pseudonymous, per-house data is visible only to its owner, and public views aggregate to street segments only when **≥ 3 homes** report. `internal/privacy` enforces this. The API gateway and MCP server must both go through it (MCP reads via QueryService).
 - **Analytics are pure functions** in `internal/hydrology`, with thresholds defined in §10 of the plan (cycle, dry run, short cycling, continuous run, baseflow, storm event, lag, recession, segment load, outage risk). Use those definitions exactly. If you change one, change the plan too.

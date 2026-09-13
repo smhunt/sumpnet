@@ -440,7 +440,7 @@ func TestPacer(t *testing.T) {
 }
 
 func TestScenarioShapes(t *testing.T) {
-	want := map[string]float64{"storm25": 25, "storm50": 50, "thaw50": 50, "outage": 50, "failing-pump": 25, "dry-week": 0}
+	want := map[string]float64{"storm25": 25, "storm50": 50, "storm25-long": 25, "storm50-long": 50, "thaw50": 50, "outage": 50, "failing-pump": 25, "dry-week": 0}
 	for name, mm := range want {
 		s := Scenarios()[name]
 		if err := s.validate(); err != nil {

@@ -61,6 +61,17 @@ func FromUplink(u codec.Uplink, meta *telemetryv1.UplinkMeta, eventTime time.Tim
 			MaxPeakCurrentA: float64(v.MaxPeakCurrentDA) / 10,
 			MinLevelMm:      uint32(v.MinLevelMM),
 		}}
+	case *codec.RainGauge:
+		return Decoded{RainGauge: &telemetryv1.RainGaugeReading{
+			Meta:         meta,
+			Ts:           ts,
+			TipCount:     v.TipCount,
+			MmPerTip:     float64(v.MMPerTipUM) / 1000,
+			IntervalS:    uint32(v.IntervalS),
+			BattMv:       uint32(v.BattMV),
+			CounterReset: v.Flags.Has(codec.RainCounterReset),
+			SensorFault:  v.Flags.Has(codec.RainSensorFault),
+		}}
 	}
 	return Decoded{}
 }

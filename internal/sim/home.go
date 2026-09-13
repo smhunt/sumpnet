@@ -533,26 +533,7 @@ func (h *home) uplink(at time.Time, u codec.Uplink, confirmed bool) Event {
 	fcnt := h.fcnt
 	h.fcnt++
 
-	var rssi [2]int32
-	var snr [2]float32
-	best := -200
-	for i := range rssi {
-		v := h.p.RSSIBase[i] + h.rng.IntN(7) - 3
-		rssi[i] = int32(v)
-		s := float64(v+115) / 2
-		s = math.Max(-15, math.Min(10, s)) + (h.rng.Float64()*2 - 1)
-		snr[i] = float32(math.Round(s*4) / 4)
-		best = max(best, v)
-	}
-	sf, dr := uint8(10), uint8(0)
-	switch {
-	case best > -95:
-		sf, dr = 7, 3
-	case best > -105:
-		sf, dr = 8, 2
-	case best > -112:
-		sf, dr = 9, 1
-	}
+	rssi, snr, sf, dr := radio(h.rng, h.p.RSSIBase)
 	ch := (int(fcnt) + h.p.Index) % 8
 	id, err := uuid.NewRandomFromReader(rngReader{h.rng})
 	if err != nil {

@@ -40,6 +40,8 @@ type Config struct {
 	LowBatteryClearMV int32                  // hysteresis (3700)
 	RiseMinMM         int32                  // ALERTS_RISE_MIN_MM: total rise over the window for OUTAGE_RISK (10)
 	RiseWindow        time.Duration          // readings considered for the rise (1h)
+	RainWindow        time.Duration          // ALERTS_RAIN_WINDOW: §10 "rain in last 6 h" (6h)
+	RainCoverageSlack time.Duration          // ALERTS_RAIN_COVERAGE_SLACK: rainfall data older than this count as missing (30m)
 	OfflineAfter      time.Duration          // ALERTS_OFFLINE_AFTER: 0 disables the wall-clock sweep (1h)
 }
 
@@ -48,6 +50,7 @@ func DefaultConfig() Config {
 	return Config{
 		MinSeverity: alertsv1.AlertSeverity_ALERT_SEVERITY_WARNING, NotifyCooldown: time.Hour, NotifyResolve: "critical",
 		LowBatteryMV: 3500, LowBatteryClearMV: 3700, RiseMinMM: 10, RiseWindow: time.Hour, OfflineAfter: time.Hour,
+		RainWindow: 6 * time.Hour, RainCoverageSlack: 30 * time.Minute,
 	}
 }
 
@@ -73,7 +76,10 @@ func ConfigFromEnv() (Config, error) {
 		}
 		c.NotifyResolve = v
 	}
-	for name, dst := range map[string]*time.Duration{"ALERTS_NOTIFY_COOLDOWN": &c.NotifyCooldown, "ALERTS_OFFLINE_AFTER": &c.OfflineAfter, "ALERTS_RISE_WINDOW": &c.RiseWindow} {
+	for name, dst := range map[string]*time.Duration{
+		"ALERTS_NOTIFY_COOLDOWN": &c.NotifyCooldown, "ALERTS_OFFLINE_AFTER": &c.OfflineAfter, "ALERTS_RISE_WINDOW": &c.RiseWindow,
+		"ALERTS_RAIN_WINDOW": &c.RainWindow, "ALERTS_RAIN_COVERAGE_SLACK": &c.RainCoverageSlack,
+	} {
 		if v, ok := os.LookupEnv(name); ok {
 			d, err := time.ParseDuration(v)
 			if err != nil {
