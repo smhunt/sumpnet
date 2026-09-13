@@ -29,24 +29,31 @@ Questions the platform must answer:
 ## 3. Architecture
 
 ```
-House nodes (LoRa 915 MHz) ─┐
-Rain / groundwater nodes  ──┼─> LoRaWAN gateways ×2 ─> ChirpStack v4 ─┐
-                            │                                         │ MQTT integration events
-ESP32 Wi-Fi nodes (dev) ────┴────────────────────────> Mosquitto ─────┤
-                                                                      v
-                                   ┌──────────── Go services (gRPC) ────────────┐
-                                   │ lora-bridge  mqtt-bridge  ->  ingest       │
-                                   │ cycle-detector   storm-analytics  weather  │
-                                   │ alerts   api-gateway (gRPC + REST + stream)│
-                                   │ mcp-server                                 │
-                                   └────────────────────────────────────────────┘
-                                                    │
-                          Postgres 16 (native partitioning + pg_partman)
-                                                    │
-                           React/TS dashboard (MapLibre) · Claude via MCP
+House nodes (ESP32-S3 + SX1262, fPorts 1-4) ─┐
+Rain gauge nodes x2 (fPort 5) ───────────────┴─> LoRaWAN gateways ─> ChirpStack v4 ─┐
+ESP32 Wi-Fi nodes (bench): sumpnet/v1/{dev_eui}/up ─────────────────────────────────┤ MQTT
+simulator CLI (ChirpStack-shaped events, replays) ──────────────────────────────────┤
+                                                                                    v
+lora-bridge (ChirpStack events) + mqtt-bridge (Wi-Fi envelope) <─────────────── Mosquitto
+  │ gRPC IngestService (client streams)
+  v
+ingest ─ COPY, ON CONFLICT DO NOTHING, NOTIFY sumpnet_ingest ─> Postgres 16 + pg_partman
+                                                                  │
+  LISTEN hint + watermark poll (ADR 0003) <───────────────────────┤
+  ├─ cycle-detector    -> est_volume_l, detections
+  ├─ alerts            -> alerts; email via Resend SMTP; AlertService gRPC (host 3135)
+  ├─ weather           -> rainfall from gauges + ECCC MSC GeoMet hourly poller
+  └─ storm-analytics   -> storm_events, home_storm_metrics
+                                                                  │ read-only pool + LISTEN
+api-gateway <─────────────────────────────────────────────────────┘
+  gRPC :9092, REST + NDJSON stream https :3134, Clerk JWKS; Acknowledge -> alerts
+  ^ web dashboard (Vite + React + MapLibre, https :3034)
+  ^ mcp-server (placeholder until Phase 6; will read QueryService, never SQL)
 ```
 
 Canada uses the US915 LoRaWAN band plan (902–928 MHz). No duty-cycle limit, but 400 ms dwell time — keep SF7–SF10 at 125 kHz.
+
+The same system as Mermaid diagrams (architecture, one uplink's data flow, data model), plus the services and ports tables: `docs/README.md`.
 
 ## 4. Hardware (per pilot)
 
@@ -113,46 +120,70 @@ Derivation as implemented in Phase 4 (`internal/weather`, ADR 0007): raw uplinks
 
 ```
 sumpnet/
-├── go.mod                      # single module to start; split later only if needed
-├── buf.yaml / buf.gen.yaml
-├── proto/sumpnet/
-│   ├── telemetry/v1/telemetry.proto
-│   ├── query/v1/query.proto
-│   └── alerts/v1/alerts.proto
-├── cmd/
-│   ├── simulator/  lora-bridge/  mqtt-bridge/  ingest/
-│   ├── cycle-detector/  storm-analytics/  weather/
-│   ├── alerts/  api-gateway/  mcp-server/
+├── cmd/                      one main package per binary
+│   ├── simulator/            CLI: deterministic neighbourhood replay (compose profile sim)
+│   ├── seed/                 CLI: demo segments, homes, devices, owner link (make seed)
+│   ├── lora-bridge/          ChirpStack uplink events -> ingest
+│   ├── mqtt-bridge/          Wi-Fi envelope uplinks -> ingest
+│   ├── ingest/               IngestService: idempotent bulk writes + NOTIFY
+│   ├── cycle-detector/       estimated volume, dry run, short cycling, continuous run
+│   ├── alerts/               alert engine, email, AlertService; `alerts testmail`
+│   ├── weather/              rainfall from gauges + ECCC GeoMet poller
+│   ├── storm-analytics/      storm events + per-home storm metrics
+│   ├── api-gateway/          QueryService over gRPC + REST, WatchNeighbourhood
+│   └── mcp-server/           placeholder (ops endpoints only) until Phase 6
 ├── internal/
-│   ├── codec/        # payload encode/decode
-│   ├── domain/       # Reading, CycleEvent, StormEvent, Home, Segment
-│   ├── store/        # pgx/v5 + sqlc-generated queries
-│   ├── hydrology/    # lag, recession, baseflow, volume maths (pure functions)
-│   ├── platform/     # config, slog setup, graceful shutdown, health checks
-│   └── privacy/      # aggregation + k-threshold enforcement
-├── migrations/       # golang-migrate SQL
-├── firmware/         # Arduino/PlatformIO for RAK4631
-├── web/              # React/TS + MapLibre dashboard
-├── deploy/
-│   ├── compose/      # docker-compose.yml, chirpstack + mosquitto config
-│   └── terraform/    # AWS: VPC, ECS Fargate, RDS, ALB, Secrets Manager
-├── loadtest/         # simulator scenarios + k6 or ghz scripts, results/*.md
-├── .github/workflows/ci.yml
-├── Makefile
-├── prompt_plan.md
-└── progress.md
+│   ├── platform/             config, slog, health/metrics endpoints, shutdown, healthcheck
+│   ├── codec/                fPort 1-5 binary payloads with golden vectors
+│   ├── chirpstack/           uplink topics and UplinkEvent JSON
+│   ├── sim/                  simulator engine, scenarios, rain gauges, sinks, truth
+│   ├── bridge/               shared MQTT consumer, bounded batchers, ingest client
+│   ├── lorabridge/           ChirpStack event decoder
+│   ├── nodebridge/           Wi-Fi envelope decoder
+│   ├── ingest/               IngestService server, bounded batch queue
+│   ├── store/                pgx pool, COPY bulk path, NOTIFY; queries/*.sql -> sqlcgen/
+│   ├── watermark/            ADR 0003 consumer: LISTEN hint + watermark poll
+│   ├── hydrology/            §10 analytics as pure functions
+│   ├── detector/             cycle-detector body
+│   ├── alerts/               rules, engine, SMTP notifier, AlertService server
+│   ├── weather/              gauge consumer, ECCC client; testdata/ recorded pages
+│   ├── storms/               storm-analytics body
+│   ├── privacy/              k >= 3 segment aggregates (ADR 0005)
+│   ├── auth/                 Clerk JWT verifier, gRPC interceptors; authtest/ test JWKS
+│   ├── gateway/              QueryService, WatchNeighbourhood hub, REST, CORS, TLS
+│   ├── seed/                 segments.geojson (illustrative outlines) + seeding
+│   ├── domain/               sentinel errors
+│   ├── testinfra/            testcontainers helpers: Postgres, Mosquitto, Mailpit
+│   ├── testpipeline/         in-process pipeline helpers for tests
+│   └── e2e/                  Phase 3, 4 and 5 acceptance tests (integration tag)
+├── proto/sumpnet/            telemetry/v1, query/v1, alerts/v1
+├── gen/go/                   generated protobuf, gRPC and grpc-gateway code (ADR 0002)
+├── migrations/               0001-0005 SQL for golang-migrate, embedded by embed.go
+├── deploy/compose/           docker-compose.yml, .env.example, chirpstack/, mosquitto/,
+│                             chirpstack-gateway-bridge/, postgres/initdb/
+├── web/                      dashboard: src/components, src/lib, src/auth, src/about.ts
+├── docs/                     README.md (this map), node-mqtt.md, adr/
+├── loadtest/results/         make sim truth exports (gitignored JSON)
+├── .github/                  workflows/ci.yml, dependabot.yml
+├── Dockerfile                one distroless image, --build-arg SERVICE=<name>
+├── Makefile, .versions.env   make targets; pinned tool versions shared with CI
+├── buf.yaml, buf.gen.yaml, sqlc.yaml, .golangci.yml
+└── README.md, CHANGELOG.md, CLAUDE.md, prompt_plan.md, progress.md
 ```
+
+Planned, not in the tree yet: `firmware/` and `docs/rf-survey.md` (Phase 7), `deploy/terraform/`,
+load-test scripts and `loadtest/results/README.md` (Phase 8).
 
 ## 7. Go conventions
 
-- Go 1.23+. `log/slog` JSON logging. `context.Context` everywhere; no goroutine without a cancellation path.
+- Go 1.26 (`go.mod`; `GO_VERSION` in `.versions.env`). `log/slog` JSON logging. `context.Context` everywhere; no goroutine without a cancellation path.
 - Errors wrapped with `fmt.Errorf("...: %w", err)`; sentinel errors in `domain`.
 - gRPC: `google.golang.org/grpc`, protos managed with `buf` (lint + breaking-change check in CI). REST via `grpc-gateway`.
 - MQTT: `github.com/eclipse/paho.golang` (v5). Postgres: `pgx/v5` + `sqlc`. Migrations: `golang-migrate`.
 - MCP: official Go SDK `github.com/modelcontextprotocol/go-sdk`.
 - Tests: table-driven unit tests; `testcontainers-go` for Postgres/Mosquitto integration tests.
 - Every service: `/healthz`, `/readyz`, Prometheus `/metrics`, graceful shutdown on SIGTERM.
-- Lint: `golangci-lint` (errcheck, govet, staticcheck, revive, gosec).
+- Lint: `golangci-lint` v2 (errcheck, govet, staticcheck, revive, gosec, ineffassign, unused) plus its formatters; `buf lint` and `buf format`.
 - Multi-stage Dockerfiles producing distroless images.
 
 ## 8. Proto sketch
@@ -163,6 +194,7 @@ service IngestService {
   rpc SubmitReadings(stream SubmitReadingsRequest) returns (SubmitReadingsResponse);
   rpc SubmitCycleEvents(stream SubmitCycleEventsRequest) returns (SubmitCycleEventsResponse); // also carries fPort 4 storm summaries
   rpc SubmitAlarms(stream SubmitAlarmsRequest) returns (SubmitAlarmsResponse);                // fPort 3
+  rpc SubmitRainGaugeReadings(stream SubmitRainGaugeReadingsRequest) returns (SubmitRainGaugeReadingsResponse); // fPort 5, stored raw (Phase 4)
 }
 
 // query/v1
@@ -227,6 +259,8 @@ Estimated volume per cycle = `pit_area_m2 × (level_end_mm − level_start_mm) /
   - Interval semantics: `PRECIP_AMOUNT` at `UTC_DATE` is the precipitation in the hour **ending** at `UTC_DATE`, so `rainfall.ts = UTC_DATE − 1 h`, `interval_s = 3600`. Evidence: hourly sums over (06Z, 06Z] reproduce `climate-daily` `TOTAL_PRECIPITATION` on every June–September 2026 day with rain in the 06Z boundary hour (e.g. 2026-06-05: daily 8.1 mm, hour-ending sum 8.1, hour-beginning sum 2.8); 88/100 days match exactly vs 81 for hour-beginning, the rest differ by 0.1 mm rounding.
   - Data are published hours late and revised: the poller re-reads 48 h each hour (7 days on start), skips null or `M` hours, and only real changes are written. Env: `WEATHER_ECCC_ENABLED` (off switch), `WEATHER_ECCC_URL`, `WEATHER_ECCC_STATION`, `WEATHER_ECCC_POLL_INTERVAL`, `WEATHER_ECCC_BACKFILL`, `WEATHER_ECCC_LOOKBACK`, `WEATHER_ECCC_TIMEOUT`.
 - Own rain gauges are primary; ECCC is fallback (hours no gauge covers) and cross-check.
+- **Alert email: Resend** over SMTP (decided 2026-09-12): `smtp.resend.com`, port 465 (implicit TLS), user `resend`, the Resend API key as `SMTP_PASSWORD`, `SMTP_FROM` on a Resend-verified domain (`onboarding@resend.dev` only delivers to the account owner). Any SMTP provider works through the same `SMTP_*` variables; an empty `SMTP_HOST` logs instead of sending. Configuration lives only in the gitignored `deploy/compose/.env`; `make alerts-testmail` checks delivery. No Resend idempotency header (a retry's fresh Date header would be a conflicting payload).
+- **Owner sign-in: Clerk** (decided 2026-09-12, ADR 0006): the dashboard uses `@clerk/react` with the publishable key in `web/.env.local`; the api-gateway verifies Clerk session JWTs against the issuer's public JWKS (`CLERK_ISSUER`, `CLERK_JWKS_URL`, `CLERK_AUTHORIZED_PARTIES`) and needs no Clerk secret. `https://dev.ecoworks.ca:3034` must be an allowed origin in the Clerk dashboard.
 
 ## 12. Phases
 
@@ -255,7 +289,7 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 
 ### Phase 3 — Cycle detection + alerts
 - [x] `cycle-detector` computes est_volume, dry-run, short-cycling, continuous-run
-- [x] `alerts` service: raise/ack/resolve, dedupe window, email via SMTP (SMS later)
+- [x] `alerts` service: raise/ack/resolve, dedupe window, email via SMTP (Resend; SMS later)
 - **Accept:** failing-pump and outage scenarios raise the correct alerts within 2 simulated minutes.
 
 ### Phase 4 — Weather + storm analytics
@@ -268,7 +302,7 @@ Each phase is sized for one to three Claude Code sessions. Do not start a phase 
 - [x] `api-gateway`: gRPC + REST (grpc-gateway), `WatchNeighbourhood` server streaming, auth (Clerk JWTs, ADR 0006)
 - [ ] `web/`: MapLibre segment heatmap, storm replay slider, owner home view, alert list — built (lint, Vitest, production build, HTTPS dev-server smoke); tick after the live map check
 - **Accept:** live storm replay visible on the map; owner sees own home only; public view shows aggregates only.
-  - Status 2026-09-12: "owner sees own home only" and "public view shows aggregates only" pass in `internal/e2e` over gRPC and REST. "Live storm replay visible on the map" needs Phase 4's `storm_events`/`home_storm_metrics` and a browser check against the running stack after merge; the live segment heatmap already animates during a simulator replay (neighbourhood clock).
+  - Status 2026-09-12: "owner sees own home only" and "public view shows aggregates only" pass in `internal/e2e` over gRPC and REST. Phase 4 is merged, so `storm_events`/`home_storm_metrics` are populated; "live storm replay visible on the map" still needs a browser check against `make up`. The live segment heatmap already animates during a simulator replay (neighbourhood clock).
 
 ### Phase 6 — MCP server
 - [ ] Tools: `list_storm_events`, `get_storm_summary`, `get_segment_load`, `get_my_home_health`, `list_active_alerts`
