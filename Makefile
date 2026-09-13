@@ -10,7 +10,7 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-.PHONY: all tools proto lint fmt test test-integration sim seed build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail web-install web-dev web-test web-build
+.PHONY: all tools proto lint fmt test test-integration sim seed site-import eccc-import build up down logs ps env clean migrate-up migrate-down migrate-new sqlc db-shell alerts-testmail web-install web-dev web-test web-build
 
 all: lint test
 
@@ -52,6 +52,18 @@ test:
 ## test-integration: tests behind the integration build tag (need Docker; testcontainers)
 test-integration:
 	go test -race -count=1 -tags integration ./...
+
+## site-import: County of Middlesex address points and road centrelines for SITE (default timberwalk) into the
+## gitignored data/ cache and snapshot (REFRESH=1 re-queries, OFFLINE=1 cache only, LOCATE="<number> <STREET>")
+SITE ?=
+site-import:
+	go run ./cmd/dataimport site -site $(or $(SITE),timberwalk) $(if $(REFRESH),-refresh) $(if $(OFFLINE),-offline) $(if $(LOCATE),-locate "$(LOCATE)")
+
+## eccc-import: ECCC LONDON CS hourly rain for hours ending in (FROM, TO] into data/rain/ (dates are UTC midnight)
+FROM ?=
+TO   ?=
+eccc-import:
+	go run ./cmd/dataimport eccc -from $(FROM) -to $(TO)
 
 ## sim: replay a scenario into the compose stack's Mosquitto (SCENARIO, SEED, SPEED, HOMES)
 SCENARIO ?= storm50

@@ -1,0 +1,18 @@
+{
+  "name": "timberwalk",
+  "description": "Timberwalk, Ilderton (Middlesex Centre): the streets of subdivision plan 39T-MC0401 plus Timberwalk Close (39T-MC1901). The default site, chosen by the owner on 2026-09-13.",
+  "muncode": "MIDC",
+  "plans": ["39T-MC0401", "39T-MC1901"],
+  "default_kind": "wooded",
+  "kind_note": "Segment kinds are illustrative, not measured: Timberwalk streets are set to wooded and the neighbouring streets to standard. Nothing in the County data records lot cover, grading or distance to the stormwater pond.",
+  "max_homes_per_segment": 40,
+  "streets": [
+    {"name": "ARROWWOOD PATH", "road_name": "ARROWWOODPATH", "label": "Arrowwood Path"},
+    {"name": "MAYAPPLE CRES", "label": "Mayapple Crescent"},
+    {"name": "MOSSY WOOD WALK", "label": "Mossy Wood Walk"},
+    {"name": "SONGBIRD LANE", "label": "Songbird Lane"},
+    {"name": "TIMBERWALK TRAIL", "label": "Timberwalk Trail"},
+    {"name": "VIOLET COURT", "label": "Violet Court"},
+    {"name": "TIMBERWALK CLOSE", "label": "Timberwalk Close"}
+  ]
+}
