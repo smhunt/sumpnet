@@ -35,7 +35,7 @@ WHERE id = @id;
 -- name: DeleteStormEvent :exec
 DELETE FROM storm_events WHERE id = @id;
 
--- name: ListHomeStormMetrics :many
+-- name: ListHomeMetricsForStorm :many
 SELECT * FROM home_storm_metrics WHERE storm_id = @storm_id ORDER BY home_id;
 
 -- name: UpsertHomeStormMetrics :exec

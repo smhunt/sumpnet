@@ -133,7 +133,7 @@ func (a *Analyzer) process(ctx context.Context, tx pgx.Tx, q *sqlcgen.Queries, r
 			if len(targets) == 0 {
 				continue
 			}
-			existing, err := q.ListHomeStormMetrics(ctx, si.id)
+			existing, err := q.ListHomeMetricsForStorm(ctx, si.id)
 			if err != nil {
 				return fmt.Errorf("storms: metrics of %s: %w", si.id, err)
 			}

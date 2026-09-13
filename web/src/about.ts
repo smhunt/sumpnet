@@ -1,0 +1,92 @@
+// In-app documentation: version, changelog, how it works and roadmap.
+// Keep CHANGELOG in step with the repository's CHANGELOG.md.
+
+export const APP_VERSION = '0.5.0'
+export const REPOSITORY_URL = 'https://github.com/smhunt/sumpnet'
+
+export interface ChangelogEntry {
+  version: string
+  date: string
+  changes: string[]
+}
+
+export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.5.0',
+    date: '2026-09-12',
+    changes: [
+      'Neighbourhood map with live pump activity per street, streamed from the api-gateway',
+      'Streets with fewer than three reporting homes are hidden and explained, never shown as zero',
+      'Storm replay: step through recorded storms and compare litres pumped per home by street',
+      'Owner sign-in with Clerk: your own home, sensor health, recent storms and alerts',
+      'Acknowledge your own alerts from the dashboard',
+    ],
+  },
+  {
+    version: '0.3.0',
+    date: '2026-09-11',
+    changes: ['Pump-cycle detection (dry run, short cycling, continuous run) and alert email'],
+  },
+  {
+    version: '0.2.0',
+    date: '2026-09-11',
+    changes: ['Ingest path: LoRaWAN and Wi-Fi sensor data stored without loss or duplicates'],
+  },
+  {
+    version: '0.1.0',
+    date: '2026-09-11',
+    changes: ['Sensor payload contracts and a deterministic 60-home neighbourhood simulator'],
+  },
+]
+
+export interface HowItWorksStep {
+  title: string
+  description: string
+}
+
+export const HOW_IT_WORKS: HowItWorksStep[] = [
+  {
+    title: 'A sensor watches each sump pit',
+    description:
+      'Volunteer homes fit a small node that measures the water level and senses pump current through a plug-in clamp. Pump wiring is never touched.',
+  },
+  {
+    title: 'Streets, not houses',
+    description:
+      'The public map only shows a street once at least three homes on it report. Below that it stays hidden, because a single pump can reveal who is home or whose basement floods.',
+  },
+  {
+    title: 'Live, or storm by storm',
+    description:
+      'Live mode shows pump cycles per hour per home over the last hour of readings. Storm mode shows how much water each street pumped per home during a recorded storm, how fast pumps responded and how long they took to settle.',
+  },
+  {
+    title: 'Your own home, only to you',
+    description:
+      'Sign in to see your home’s sensor health, recent storms and alerts. The operator links your account to your home; nobody else can see it.',
+  },
+]
+
+export type Priority = 'high' | 'medium' | 'low'
+
+export interface RoadmapGroup {
+  category: string
+  items: { title: string; priority: Priority }[]
+}
+
+export const ROADMAP: RoadmapGroup[] = [
+  {
+    category: 'In progress',
+    items: [{ title: 'Rainfall from gauges and Environment Canada, with per-storm lag and recession', priority: 'high' }],
+  },
+  {
+    category: 'Planned',
+    items: [
+      { title: 'First real sensors installed alongside the simulated homes', priority: 'high' },
+      { title: 'Consent form and plain-language data policy for pilot homes', priority: 'high' },
+      { title: 'Ask Claude about storms through the MCP server', priority: 'medium' },
+      { title: 'Surveyed street outlines agreed with Middlesex Centre', priority: 'medium' },
+      { title: 'Alert email to each owner instead of one operator', priority: 'low' },
+    ],
+  },
+]

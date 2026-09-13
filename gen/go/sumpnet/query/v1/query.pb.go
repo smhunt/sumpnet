@@ -85,12 +85,13 @@ type Segment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// Street-segment polygon as a GeoJSON geometry string.
-	GeometryGeojson string      `protobuf:"bytes,3,opt,name=geometry_geojson,json=geometryGeojson,proto3" json:"geometry_geojson,omitempty"`
-	HomeCount       uint32      `protobuf:"varint,4,opt,name=home_count,json=homeCount,proto3" json:"home_count,omitempty"`
-	Kind            SegmentKind `protobuf:"varint,5,opt,name=kind,proto3,enum=sumpnet.query.v1.SegmentKind" json:"kind,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Street-segment polygon as a GeoJSON geometry string; empty when unset.
+	GeometryGeojson string `protobuf:"bytes,3,opt,name=geometry_geojson,json=geometryGeojson,proto3" json:"geometry_geojson,omitempty"`
+	// Homes linked to the segment (not necessarily reporting).
+	HomeCount     uint32      `protobuf:"varint,4,opt,name=home_count,json=homeCount,proto3" json:"home_count,omitempty"`
+	Kind          SegmentKind `protobuf:"varint,5,opt,name=kind,proto3,enum=sumpnet.query.v1.SegmentKind" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Segment) Reset() {
@@ -219,12 +220,15 @@ func (x *Device) GetInstalledAt() *timestamppb.Timestamp {
 }
 
 type HomeHealth struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	LastSeen             *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
-	BattMv               uint32                 `protobuf:"varint,2,opt,name=batt_mv,json=battMv,proto3" json:"batt_mv,omitempty"`
-	MainsOk              bool                   `protobuf:"varint,3,opt,name=mains_ok,json=mainsOk,proto3" json:"mains_ok,omitempty"`
-	BaseflowCyclesPerDay float64                `protobuf:"fixed64,4,opt,name=baseflow_cycles_per_day,json=baseflowCyclesPerDay,proto3" json:"baseflow_cycles_per_day,omitempty"`
-	ActiveAlerts         uint32                 `protobuf:"varint,5,opt,name=active_alerts,json=activeAlerts,proto3" json:"active_alerts,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Event time of the newest heartbeat from any of the home's devices.
+	LastSeen *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	BattMv   uint32                 `protobuf:"varint,2,opt,name=batt_mv,json=battMv,proto3" json:"batt_mv,omitempty"`
+	MainsOk  bool                   `protobuf:"varint,3,opt,name=mains_ok,json=mainsOk,proto3" json:"mains_ok,omitempty"`
+	// Baseflow storm-analytics used for the home's most recent storm; 0 until
+	// storm-analytics (Phase 4) has computed one.
+	BaseflowCyclesPerDay float64 `protobuf:"fixed64,4,opt,name=baseflow_cycles_per_day,json=baseflowCyclesPerDay,proto3" json:"baseflow_cycles_per_day,omitempty"`
+	ActiveAlerts         uint32  `protobuf:"varint,5,opt,name=active_alerts,json=activeAlerts,proto3" json:"active_alerts,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -456,15 +460,22 @@ func (x *StormEvent) GetPeakIntensityMmH() float64 {
 }
 
 type HomeStormMetrics struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StormId       string                 `protobuf:"bytes,1,opt,name=storm_id,json=stormId,proto3" json:"storm_id,omitempty"`
-	HomeId        string                 `protobuf:"bytes,2,opt,name=home_id,json=homeId,proto3" json:"home_id,omitempty"`
-	LagMin        float64                `protobuf:"fixed64,3,opt,name=lag_min,json=lagMin,proto3" json:"lag_min,omitempty"`
-	RecessionMin  float64                `protobuf:"fixed64,4,opt,name=recession_min,json=recessionMin,proto3" json:"recession_min,omitempty"`
-	VolumeL       float64                `protobuf:"fixed64,5,opt,name=volume_l,json=volumeL,proto3" json:"volume_l,omitempty"`
-	Cycles        uint32                 `protobuf:"varint,6,opt,name=cycles,proto3" json:"cycles,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	StormId string                 `protobuf:"bytes,1,opt,name=storm_id,json=stormId,proto3" json:"storm_id,omitempty"`
+	HomeId  string                 `protobuf:"bytes,2,opt,name=home_id,json=homeId,proto3" json:"home_id,omitempty"`
+	// Meaningful only when lag_reached: 0 otherwise.
+	LagMin float64 `protobuf:"fixed64,3,opt,name=lag_min,json=lagMin,proto3" json:"lag_min,omitempty"`
+	// Meaningful only when recession_reached: 0 otherwise.
+	RecessionMin float64 `protobuf:"fixed64,4,opt,name=recession_min,json=recessionMin,proto3" json:"recession_min,omitempty"`
+	VolumeL      float64 `protobuf:"fixed64,5,opt,name=volume_l,json=volumeL,proto3" json:"volume_l,omitempty"`
+	Cycles       uint32  `protobuf:"varint,6,opt,name=cycles,proto3" json:"cycles,omitempty"`
+	// False while the cycle rate never exceeded 2x baseflow (§10 lag).
+	LagReached bool `protobuf:"varint,7,opt,name=lag_reached,json=lagReached,proto3" json:"lag_reached,omitempty"`
+	// False until the cycle rate is back within 1.2x baseflow (§10 recession).
+	RecessionReached bool                   `protobuf:"varint,8,opt,name=recession_reached,json=recessionReached,proto3" json:"recession_reached,omitempty"`
+	StormStartedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=storm_started_at,json=stormStartedAt,proto3" json:"storm_started_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *HomeStormMetrics) Reset() {
@@ -537,6 +548,27 @@ func (x *HomeStormMetrics) GetCycles() uint32 {
 		return x.Cycles
 	}
 	return 0
+}
+
+func (x *HomeStormMetrics) GetLagReached() bool {
+	if x != nil {
+		return x.LagReached
+	}
+	return false
+}
+
+func (x *HomeStormMetrics) GetRecessionReached() bool {
+	if x != nil {
+		return x.RecessionReached
+	}
+	return false
+}
+
+func (x *HomeStormMetrics) GetStormStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StormStartedAt
+	}
+	return nil
 }
 
 // SegmentStormMetrics is the public, aggregated view. When homes_reporting
@@ -633,6 +665,9 @@ func (x *SegmentStormMetrics) GetMedianRecessionMin() float64 {
 	return 0
 }
 
+// SegmentStatus is the live public view of one segment over the status
+// window ending at `NeighbourhoodUpdate.ts` (the newest heartbeat event time,
+// so replays of past storms animate too). Suppressed when < 3 homes report.
 type SegmentStatus struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SegmentId      string                 `protobuf:"bytes,1,opt,name=segment_id,json=segmentId,proto3" json:"segment_id,omitempty"`
@@ -1131,7 +1166,8 @@ type WatchNeighbourhoodRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Empty means all segments.
 	SegmentIds []string `protobuf:"bytes,1,rep,name=segment_ids,json=segmentIds,proto3" json:"segment_ids,omitempty"`
-	// Send the current state of each segment before live updates.
+	// Send the current state of each segment (and, for an owner, their active
+	// alerts, plus open and recent storm events) before live updates.
 	SendSnapshot  bool `protobuf:"varint,2,opt,name=send_snapshot,json=sendSnapshot,proto3" json:"send_snapshot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1225,6 +1261,352 @@ func (x *WatchNeighbourhoodResponse) GetUpdate() *NeighbourhoodUpdate {
 	return nil
 }
 
+type ListSegmentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSegmentsRequest) Reset() {
+	*x = ListSegmentsRequest{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSegmentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSegmentsRequest) ProtoMessage() {}
+
+func (x *ListSegmentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSegmentsRequest.ProtoReflect.Descriptor instead.
+func (*ListSegmentsRequest) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{17}
+}
+
+type ListSegmentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Segments      []*Segment             `protobuf:"bytes,1,rep,name=segments,proto3" json:"segments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSegmentsResponse) Reset() {
+	*x = ListSegmentsResponse{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSegmentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSegmentsResponse) ProtoMessage() {}
+
+func (x *ListSegmentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSegmentsResponse.ProtoReflect.Descriptor instead.
+func (*ListSegmentsResponse) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListSegmentsResponse) GetSegments() []*Segment {
+	if x != nil {
+		return x.Segments
+	}
+	return nil
+}
+
+type ListMyHomesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyHomesRequest) Reset() {
+	*x = ListMyHomesRequest{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyHomesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyHomesRequest) ProtoMessage() {}
+
+func (x *ListMyHomesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyHomesRequest.ProtoReflect.Descriptor instead.
+func (*ListMyHomesRequest) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{19}
+}
+
+type ListMyHomesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Homes         []*Home                `protobuf:"bytes,1,rep,name=homes,proto3" json:"homes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyHomesResponse) Reset() {
+	*x = ListMyHomesResponse{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyHomesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyHomesResponse) ProtoMessage() {}
+
+func (x *ListMyHomesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyHomesResponse.ProtoReflect.Descriptor instead.
+func (*ListMyHomesResponse) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ListMyHomesResponse) GetHomes() []*Home {
+	if x != nil {
+		return x.Homes
+	}
+	return nil
+}
+
+type ListMyAlertsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Optional: one of the caller's homes. A home the caller does not own is
+	// NOT_FOUND.
+	HomeId        string `protobuf:"bytes,1,opt,name=home_id,json=homeId,proto3" json:"home_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyAlertsRequest) Reset() {
+	*x = ListMyAlertsRequest{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyAlertsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyAlertsRequest) ProtoMessage() {}
+
+func (x *ListMyAlertsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyAlertsRequest.ProtoReflect.Descriptor instead.
+func (*ListMyAlertsRequest) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListMyAlertsRequest) GetHomeId() string {
+	if x != nil {
+		return x.HomeId
+	}
+	return ""
+}
+
+type ListMyAlertsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alerts        []*v1.Alert            `protobuf:"bytes,1,rep,name=alerts,proto3" json:"alerts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMyAlertsResponse) Reset() {
+	*x = ListMyAlertsResponse{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMyAlertsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMyAlertsResponse) ProtoMessage() {}
+
+func (x *ListMyAlertsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMyAlertsResponse.ProtoReflect.Descriptor instead.
+func (*ListMyAlertsResponse) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListMyAlertsResponse) GetAlerts() []*v1.Alert {
+	if x != nil {
+		return x.Alerts
+	}
+	return nil
+}
+
+type AcknowledgeMyAlertRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AlertId       string                 `protobuf:"bytes,1,opt,name=alert_id,json=alertId,proto3" json:"alert_id,omitempty"`
+	Note          string                 `protobuf:"bytes,2,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcknowledgeMyAlertRequest) Reset() {
+	*x = AcknowledgeMyAlertRequest{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcknowledgeMyAlertRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcknowledgeMyAlertRequest) ProtoMessage() {}
+
+func (x *AcknowledgeMyAlertRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcknowledgeMyAlertRequest.ProtoReflect.Descriptor instead.
+func (*AcknowledgeMyAlertRequest) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *AcknowledgeMyAlertRequest) GetAlertId() string {
+	if x != nil {
+		return x.AlertId
+	}
+	return ""
+}
+
+func (x *AcknowledgeMyAlertRequest) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+type AcknowledgeMyAlertResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alert         *v1.Alert              `protobuf:"bytes,1,opt,name=alert,proto3" json:"alert,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcknowledgeMyAlertResponse) Reset() {
+	*x = AcknowledgeMyAlertResponse{}
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcknowledgeMyAlertResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcknowledgeMyAlertResponse) ProtoMessage() {}
+
+func (x *AcknowledgeMyAlertResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sumpnet_query_v1_query_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcknowledgeMyAlertResponse.ProtoReflect.Descriptor instead.
+func (*AcknowledgeMyAlertResponse) Descriptor() ([]byte, []int) {
+	return file_sumpnet_query_v1_query_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *AcknowledgeMyAlertResponse) GetAlert() *v1.Alert {
+	if x != nil {
+		return x.Alert
+	}
+	return nil
+}
+
 var File_sumpnet_query_v1_query_proto protoreflect.FileDescriptor
 
 const file_sumpnet_query_v1_query_proto_rawDesc = "" +
@@ -1264,14 +1646,18 @@ const file_sumpnet_query_v1_query_proto_rawDesc = "" +
 	"started_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
 	"\bended_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12\"\n" +
 	"\rtotal_rain_mm\x18\x04 \x01(\x01R\vtotalRainMm\x12-\n" +
-	"\x13peak_intensity_mm_h\x18\x05 \x01(\x01R\x10peakIntensityMmH\"\xb7\x01\n" +
+	"\x13peak_intensity_mm_h\x18\x05 \x01(\x01R\x10peakIntensityMmH\"\xcb\x02\n" +
 	"\x10HomeStormMetrics\x12\x19\n" +
 	"\bstorm_id\x18\x01 \x01(\tR\astormId\x12\x17\n" +
 	"\ahome_id\x18\x02 \x01(\tR\x06homeId\x12\x17\n" +
 	"\alag_min\x18\x03 \x01(\x01R\x06lagMin\x12#\n" +
 	"\rrecession_min\x18\x04 \x01(\x01R\frecessionMin\x12\x19\n" +
 	"\bvolume_l\x18\x05 \x01(\x01R\avolumeL\x12\x16\n" +
-	"\x06cycles\x18\x06 \x01(\rR\x06cycles\"\x97\x02\n" +
+	"\x06cycles\x18\x06 \x01(\rR\x06cycles\x12\x1f\n" +
+	"\vlag_reached\x18\a \x01(\bR\n" +
+	"lagReached\x12+\n" +
+	"\x11recession_reached\x18\b \x01(\bR\x10recessionReached\x12D\n" +
+	"\x10storm_started_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0estormStartedAt\"\x97\x02\n" +
 	"\x13SegmentStormMetrics\x12\x19\n" +
 	"\bstorm_id\x18\x01 \x01(\tR\astormId\x12\x1d\n" +
 	"\n" +
@@ -1324,18 +1710,37 @@ const file_sumpnet_query_v1_query_proto_rawDesc = "" +
 	"segmentIds\x12#\n" +
 	"\rsend_snapshot\x18\x02 \x01(\bR\fsendSnapshot\"[\n" +
 	"\x1aWatchNeighbourhoodResponse\x12=\n" +
-	"\x06update\x18\x01 \x01(\v2%.sumpnet.query.v1.NeighbourhoodUpdateR\x06update*\x99\x01\n" +
+	"\x06update\x18\x01 \x01(\v2%.sumpnet.query.v1.NeighbourhoodUpdateR\x06update\"\x15\n" +
+	"\x13ListSegmentsRequest\"M\n" +
+	"\x14ListSegmentsResponse\x125\n" +
+	"\bsegments\x18\x01 \x03(\v2\x19.sumpnet.query.v1.SegmentR\bsegments\"\x14\n" +
+	"\x12ListMyHomesRequest\"C\n" +
+	"\x13ListMyHomesResponse\x12,\n" +
+	"\x05homes\x18\x01 \x03(\v2\x16.sumpnet.query.v1.HomeR\x05homes\".\n" +
+	"\x13ListMyAlertsRequest\x12\x17\n" +
+	"\ahome_id\x18\x01 \x01(\tR\x06homeId\"H\n" +
+	"\x14ListMyAlertsResponse\x120\n" +
+	"\x06alerts\x18\x01 \x03(\v2\x18.sumpnet.alerts.v1.AlertR\x06alerts\"J\n" +
+	"\x19AcknowledgeMyAlertRequest\x12\x19\n" +
+	"\balert_id\x18\x01 \x01(\tR\aalertId\x12\x12\n" +
+	"\x04note\x18\x02 \x01(\tR\x04note\"L\n" +
+	"\x1aAcknowledgeMyAlertResponse\x12.\n" +
+	"\x05alert\x18\x01 \x01(\v2\x18.sumpnet.alerts.v1.AlertR\x05alert*\x99\x01\n" +
 	"\vSegmentKind\x12\x1c\n" +
 	"\x18SEGMENT_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15SEGMENT_KIND_STANDARD\x10\x01\x12\x17\n" +
 	"\x13SEGMENT_KIND_WOODED\x10\x02\x12\x1a\n" +
 	"\x16SEGMENT_KIND_NEAR_POND\x10\x03\x12\x1c\n" +
-	"\x18SEGMENT_KIND_HIGH_GROUND\x10\x042\x9b\x04\n" +
+	"\x18SEGMENT_KIND_HIGH_GROUND\x10\x042\x9b\b\n" +
 	"\fQueryService\x12k\n" +
 	"\aGetHome\x12 .sumpnet.query.v1.GetHomeRequest\x1a!.sumpnet.query.v1.GetHomeResponse\"\x1b\x82\xd3\xe4\x93\x02\x15\x12\x13/v1/homes/{home_id}\x12\x80\x01\n" +
 	"\x0fListStormEvents\x12(.sumpnet.query.v1.ListStormEventsRequest\x1a).sumpnet.query.v1.ListStormEventsResponse\"\x18\x82\xd3\xe4\x93\x02\x12\x12\x10/v1/storm-events\x12\x85\x01\n" +
 	"\rGetStormEvent\x12&.sumpnet.query.v1.GetStormEventRequest\x1a'.sumpnet.query.v1.GetStormEventResponse\"#\x82\xd3\xe4\x93\x02\x1d\x12\x1b/v1/storm-events/{storm_id}\x12\x92\x01\n" +
-	"\x12WatchNeighbourhood\x12+.sumpnet.query.v1.WatchNeighbourhoodRequest\x1a,.sumpnet.query.v1.WatchNeighbourhoodResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/v1/neighbourhood:watch0\x01B;Z9github.com/smhunt/sumpnet/gen/go/sumpnet/query/v1;queryv1b\x06proto3"
+	"\x12WatchNeighbourhood\x12+.sumpnet.query.v1.WatchNeighbourhoodRequest\x1a,.sumpnet.query.v1.WatchNeighbourhoodResponse\"\x1f\x82\xd3\xe4\x93\x02\x19\x12\x17/v1/neighbourhood:watch0\x01\x12s\n" +
+	"\fListSegments\x12%.sumpnet.query.v1.ListSegmentsRequest\x1a&.sumpnet.query.v1.ListSegmentsResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/segments\x12p\n" +
+	"\vListMyHomes\x12$.sumpnet.query.v1.ListMyHomesRequest\x1a%.sumpnet.query.v1.ListMyHomesResponse\"\x14\x82\xd3\xe4\x93\x02\x0e\x12\f/v1/me/homes\x12t\n" +
+	"\fListMyAlerts\x12%.sumpnet.query.v1.ListMyAlertsRequest\x1a&.sumpnet.query.v1.ListMyAlertsResponse\"\x15\x82\xd3\xe4\x93\x02\x0f\x12\r/v1/me/alerts\x12\xa0\x01\n" +
+	"\x12AcknowledgeMyAlert\x12+.sumpnet.query.v1.AcknowledgeMyAlertRequest\x1a,.sumpnet.query.v1.AcknowledgeMyAlertResponse\"/\x82\xd3\xe4\x93\x02):\x01*\"$/v1/me/alerts/{alert_id}:acknowledgeB;Z9github.com/smhunt/sumpnet/gen/go/sumpnet/query/v1;queryv1b\x06proto3"
 
 var (
 	file_sumpnet_query_v1_query_proto_rawDescOnce sync.Once
@@ -1350,7 +1755,7 @@ func file_sumpnet_query_v1_query_proto_rawDescGZIP() []byte {
 }
 
 var file_sumpnet_query_v1_query_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sumpnet_query_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_sumpnet_query_v1_query_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_sumpnet_query_v1_query_proto_goTypes = []any{
 	(SegmentKind)(0),                   // 0: sumpnet.query.v1.SegmentKind
 	(*Segment)(nil),                    // 1: sumpnet.query.v1.Segment
@@ -1370,43 +1775,64 @@ var file_sumpnet_query_v1_query_proto_goTypes = []any{
 	(*GetStormEventResponse)(nil),      // 15: sumpnet.query.v1.GetStormEventResponse
 	(*WatchNeighbourhoodRequest)(nil),  // 16: sumpnet.query.v1.WatchNeighbourhoodRequest
 	(*WatchNeighbourhoodResponse)(nil), // 17: sumpnet.query.v1.WatchNeighbourhoodResponse
-	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
-	(*v1.Alert)(nil),                   // 19: sumpnet.alerts.v1.Alert
+	(*ListSegmentsRequest)(nil),        // 18: sumpnet.query.v1.ListSegmentsRequest
+	(*ListSegmentsResponse)(nil),       // 19: sumpnet.query.v1.ListSegmentsResponse
+	(*ListMyHomesRequest)(nil),         // 20: sumpnet.query.v1.ListMyHomesRequest
+	(*ListMyHomesResponse)(nil),        // 21: sumpnet.query.v1.ListMyHomesResponse
+	(*ListMyAlertsRequest)(nil),        // 22: sumpnet.query.v1.ListMyAlertsRequest
+	(*ListMyAlertsResponse)(nil),       // 23: sumpnet.query.v1.ListMyAlertsResponse
+	(*AcknowledgeMyAlertRequest)(nil),  // 24: sumpnet.query.v1.AcknowledgeMyAlertRequest
+	(*AcknowledgeMyAlertResponse)(nil), // 25: sumpnet.query.v1.AcknowledgeMyAlertResponse
+	(*timestamppb.Timestamp)(nil),      // 26: google.protobuf.Timestamp
+	(*v1.Alert)(nil),                   // 27: sumpnet.alerts.v1.Alert
 }
 var file_sumpnet_query_v1_query_proto_depIdxs = []int32{
 	0,  // 0: sumpnet.query.v1.Segment.kind:type_name -> sumpnet.query.v1.SegmentKind
-	18, // 1: sumpnet.query.v1.Device.installed_at:type_name -> google.protobuf.Timestamp
-	18, // 2: sumpnet.query.v1.HomeHealth.last_seen:type_name -> google.protobuf.Timestamp
-	18, // 3: sumpnet.query.v1.Home.consent_at:type_name -> google.protobuf.Timestamp
+	26, // 1: sumpnet.query.v1.Device.installed_at:type_name -> google.protobuf.Timestamp
+	26, // 2: sumpnet.query.v1.HomeHealth.last_seen:type_name -> google.protobuf.Timestamp
+	26, // 3: sumpnet.query.v1.Home.consent_at:type_name -> google.protobuf.Timestamp
 	2,  // 4: sumpnet.query.v1.Home.devices:type_name -> sumpnet.query.v1.Device
 	3,  // 5: sumpnet.query.v1.Home.health:type_name -> sumpnet.query.v1.HomeHealth
-	18, // 6: sumpnet.query.v1.StormEvent.started_at:type_name -> google.protobuf.Timestamp
-	18, // 7: sumpnet.query.v1.StormEvent.ended_at:type_name -> google.protobuf.Timestamp
-	18, // 8: sumpnet.query.v1.NeighbourhoodUpdate.ts:type_name -> google.protobuf.Timestamp
-	8,  // 9: sumpnet.query.v1.NeighbourhoodUpdate.segment_status:type_name -> sumpnet.query.v1.SegmentStatus
-	5,  // 10: sumpnet.query.v1.NeighbourhoodUpdate.storm_event:type_name -> sumpnet.query.v1.StormEvent
-	19, // 11: sumpnet.query.v1.NeighbourhoodUpdate.alert:type_name -> sumpnet.alerts.v1.Alert
-	4,  // 12: sumpnet.query.v1.GetHomeResponse.home:type_name -> sumpnet.query.v1.Home
-	6,  // 13: sumpnet.query.v1.GetHomeResponse.recent_storms:type_name -> sumpnet.query.v1.HomeStormMetrics
-	18, // 14: sumpnet.query.v1.ListStormEventsRequest.since:type_name -> google.protobuf.Timestamp
-	18, // 15: sumpnet.query.v1.ListStormEventsRequest.until:type_name -> google.protobuf.Timestamp
-	5,  // 16: sumpnet.query.v1.ListStormEventsResponse.storm_events:type_name -> sumpnet.query.v1.StormEvent
-	5,  // 17: sumpnet.query.v1.GetStormEventResponse.storm_event:type_name -> sumpnet.query.v1.StormEvent
-	7,  // 18: sumpnet.query.v1.GetStormEventResponse.segments:type_name -> sumpnet.query.v1.SegmentStormMetrics
-	9,  // 19: sumpnet.query.v1.WatchNeighbourhoodResponse.update:type_name -> sumpnet.query.v1.NeighbourhoodUpdate
-	10, // 20: sumpnet.query.v1.QueryService.GetHome:input_type -> sumpnet.query.v1.GetHomeRequest
-	12, // 21: sumpnet.query.v1.QueryService.ListStormEvents:input_type -> sumpnet.query.v1.ListStormEventsRequest
-	14, // 22: sumpnet.query.v1.QueryService.GetStormEvent:input_type -> sumpnet.query.v1.GetStormEventRequest
-	16, // 23: sumpnet.query.v1.QueryService.WatchNeighbourhood:input_type -> sumpnet.query.v1.WatchNeighbourhoodRequest
-	11, // 24: sumpnet.query.v1.QueryService.GetHome:output_type -> sumpnet.query.v1.GetHomeResponse
-	13, // 25: sumpnet.query.v1.QueryService.ListStormEvents:output_type -> sumpnet.query.v1.ListStormEventsResponse
-	15, // 26: sumpnet.query.v1.QueryService.GetStormEvent:output_type -> sumpnet.query.v1.GetStormEventResponse
-	17, // 27: sumpnet.query.v1.QueryService.WatchNeighbourhood:output_type -> sumpnet.query.v1.WatchNeighbourhoodResponse
-	24, // [24:28] is the sub-list for method output_type
-	20, // [20:24] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	26, // 6: sumpnet.query.v1.StormEvent.started_at:type_name -> google.protobuf.Timestamp
+	26, // 7: sumpnet.query.v1.StormEvent.ended_at:type_name -> google.protobuf.Timestamp
+	26, // 8: sumpnet.query.v1.HomeStormMetrics.storm_started_at:type_name -> google.protobuf.Timestamp
+	26, // 9: sumpnet.query.v1.NeighbourhoodUpdate.ts:type_name -> google.protobuf.Timestamp
+	8,  // 10: sumpnet.query.v1.NeighbourhoodUpdate.segment_status:type_name -> sumpnet.query.v1.SegmentStatus
+	5,  // 11: sumpnet.query.v1.NeighbourhoodUpdate.storm_event:type_name -> sumpnet.query.v1.StormEvent
+	27, // 12: sumpnet.query.v1.NeighbourhoodUpdate.alert:type_name -> sumpnet.alerts.v1.Alert
+	4,  // 13: sumpnet.query.v1.GetHomeResponse.home:type_name -> sumpnet.query.v1.Home
+	6,  // 14: sumpnet.query.v1.GetHomeResponse.recent_storms:type_name -> sumpnet.query.v1.HomeStormMetrics
+	26, // 15: sumpnet.query.v1.ListStormEventsRequest.since:type_name -> google.protobuf.Timestamp
+	26, // 16: sumpnet.query.v1.ListStormEventsRequest.until:type_name -> google.protobuf.Timestamp
+	5,  // 17: sumpnet.query.v1.ListStormEventsResponse.storm_events:type_name -> sumpnet.query.v1.StormEvent
+	5,  // 18: sumpnet.query.v1.GetStormEventResponse.storm_event:type_name -> sumpnet.query.v1.StormEvent
+	7,  // 19: sumpnet.query.v1.GetStormEventResponse.segments:type_name -> sumpnet.query.v1.SegmentStormMetrics
+	9,  // 20: sumpnet.query.v1.WatchNeighbourhoodResponse.update:type_name -> sumpnet.query.v1.NeighbourhoodUpdate
+	1,  // 21: sumpnet.query.v1.ListSegmentsResponse.segments:type_name -> sumpnet.query.v1.Segment
+	4,  // 22: sumpnet.query.v1.ListMyHomesResponse.homes:type_name -> sumpnet.query.v1.Home
+	27, // 23: sumpnet.query.v1.ListMyAlertsResponse.alerts:type_name -> sumpnet.alerts.v1.Alert
+	27, // 24: sumpnet.query.v1.AcknowledgeMyAlertResponse.alert:type_name -> sumpnet.alerts.v1.Alert
+	10, // 25: sumpnet.query.v1.QueryService.GetHome:input_type -> sumpnet.query.v1.GetHomeRequest
+	12, // 26: sumpnet.query.v1.QueryService.ListStormEvents:input_type -> sumpnet.query.v1.ListStormEventsRequest
+	14, // 27: sumpnet.query.v1.QueryService.GetStormEvent:input_type -> sumpnet.query.v1.GetStormEventRequest
+	16, // 28: sumpnet.query.v1.QueryService.WatchNeighbourhood:input_type -> sumpnet.query.v1.WatchNeighbourhoodRequest
+	18, // 29: sumpnet.query.v1.QueryService.ListSegments:input_type -> sumpnet.query.v1.ListSegmentsRequest
+	20, // 30: sumpnet.query.v1.QueryService.ListMyHomes:input_type -> sumpnet.query.v1.ListMyHomesRequest
+	22, // 31: sumpnet.query.v1.QueryService.ListMyAlerts:input_type -> sumpnet.query.v1.ListMyAlertsRequest
+	24, // 32: sumpnet.query.v1.QueryService.AcknowledgeMyAlert:input_type -> sumpnet.query.v1.AcknowledgeMyAlertRequest
+	11, // 33: sumpnet.query.v1.QueryService.GetHome:output_type -> sumpnet.query.v1.GetHomeResponse
+	13, // 34: sumpnet.query.v1.QueryService.ListStormEvents:output_type -> sumpnet.query.v1.ListStormEventsResponse
+	15, // 35: sumpnet.query.v1.QueryService.GetStormEvent:output_type -> sumpnet.query.v1.GetStormEventResponse
+	17, // 36: sumpnet.query.v1.QueryService.WatchNeighbourhood:output_type -> sumpnet.query.v1.WatchNeighbourhoodResponse
+	19, // 37: sumpnet.query.v1.QueryService.ListSegments:output_type -> sumpnet.query.v1.ListSegmentsResponse
+	21, // 38: sumpnet.query.v1.QueryService.ListMyHomes:output_type -> sumpnet.query.v1.ListMyHomesResponse
+	23, // 39: sumpnet.query.v1.QueryService.ListMyAlerts:output_type -> sumpnet.query.v1.ListMyAlertsResponse
+	25, // 40: sumpnet.query.v1.QueryService.AcknowledgeMyAlert:output_type -> sumpnet.query.v1.AcknowledgeMyAlertResponse
+	33, // [33:41] is the sub-list for method output_type
+	25, // [25:33] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_sumpnet_query_v1_query_proto_init() }
@@ -1425,7 +1851,7 @@ func file_sumpnet_query_v1_query_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sumpnet_query_v1_query_proto_rawDesc), len(file_sumpnet_query_v1_query_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   17,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

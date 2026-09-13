@@ -150,7 +150,7 @@ func TestStormAnalyticsFromSimulatedStorm(t *testing.T) {
 	if math.Abs(s.TotalRainMm-ts.TotalMm) > 0.3 {
 		t.Errorf("total %.2f mm, truth %.2f", s.TotalRainMm, ts.TotalMm)
 	}
-	metrics, err := q.ListHomeStormMetrics(ctx, s.ID)
+	metrics, err := q.ListHomeMetricsForStorm(ctx, s.ID)
 	if err != nil || len(metrics) != 4 {
 		t.Fatalf("metrics = %+v, %v", metrics, err)
 	}
@@ -204,7 +204,7 @@ func TestStormAnalyticsFromSimulatedStorm(t *testing.T) {
 	if now := updates(); now != was {
 		t.Errorf("replay wrote %v more rows", now-was)
 	}
-	after, _ := q.ListHomeStormMetrics(ctx, s.ID)
+	after, _ := q.ListHomeMetricsForStorm(ctx, s.ID)
 	for i := range after {
 		if !after[i].ComputedAt.Equal(before[i].ComputedAt) {
 			t.Errorf("home %s recomputed on replay", after[i].HomeID)

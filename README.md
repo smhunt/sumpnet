@@ -94,6 +94,25 @@ make sim SCENARIO=storm50-long SEED=42 SPEED=0 HOMES=16
 # ECCC polling needs outbound HTTPS; set WEATHER_ECCC_ENABLED=false in deploy/compose/.env for replays.
 ```
 
+## API gateway and dashboard
+
+`api-gateway` serves `query.v1.QueryService` over gRPC and REST (grpc-gateway), with the REST port on
+`https://dev.ecoworks.ca:3134`. Public calls return street-segment aggregates only, built by
+`internal/privacy` and suppressed below three reporting homes; owners sign in with Clerk and see only
+their own home and alerts (anyone else's home is simply "not found"). `WatchNeighbourhood` streams live
+segment status and storm events to everyone and alerts only to their owner. Decisions: ADR 0006; REST
+reference: [`docs/README.md`](docs/README.md).
+
+`web/` is the dashboard (Vite, React, MapLibre): a live heatmap of pump activity per street with
+privacy-hidden streets drawn hatched and explained, a storm replay gauge, and an owner view with alert
+acknowledgement.
+
+```bash
+make seed DEMO_OWNER_SUBJECT=user_...   # illustrative Timberwalk streets + the simulator's homes; optional owner link
+cp web/.env.example web/.env.local      # VITE_CLERK_PUBLISHABLE_KEY for sign-in
+make web-install && make web-dev        # https://dev.ecoworks.ca:3034
+```
+
 ## The simulator
 
 `cmd/simulator` is a deterministic model of a neighbourhood: 60 homes across 8 street segments
@@ -116,8 +135,8 @@ against known answers.
 | 1 — Contracts + simulator | done |
 | 2 — Ingest path | done |
 | 3 — Cycle detection + alerts | done |
-| 4 — Weather + storm analytics | done (lag tolerance pending, see prompt_plan §14) |
-| 5 — API gateway + dashboard | planned |
+| 4 — Weather + storm analytics | done (lag tolerance ±10 % or 15 min approved 2026-09-12; pump-rate inflow estimate in a follow-up PR) |
+| 5 — API gateway + dashboard | built; acceptance test passing, live storm replay check pending |
 | 6 — MCP server | planned |
 | 7 — Firmware + first real nodes | planned |
 | 8 — AWS + load test | planned |

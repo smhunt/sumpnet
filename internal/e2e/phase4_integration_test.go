@@ -196,7 +196,7 @@ func TestPhase4StormAcceptance(t *testing.T) {
 	}
 
 	// --- every home ------------------------------------------------------------
-	metrics, err := q.ListHomeStormMetrics(ctx, se.ID)
+	metrics, err := q.ListHomeMetricsForStorm(ctx, se.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

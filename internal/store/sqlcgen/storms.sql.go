@@ -138,12 +138,12 @@ func (q *Queries) ListCycleEventsForDevice(ctx context.Context, arg ListCycleEve
 	return items, nil
 }
 
-const listHomeStormMetrics = `-- name: ListHomeStormMetrics :many
+const listHomeMetricsForStorm = `-- name: ListHomeMetricsForStorm :many
 SELECT storm_id, home_id, lag_min, recession_min, volume_l, cycles, baseflow_cpd, computed_at FROM home_storm_metrics WHERE storm_id = $1 ORDER BY home_id
 `
 
-func (q *Queries) ListHomeStormMetrics(ctx context.Context, stormID uuid.UUID) ([]HomeStormMetric, error) {
-	rows, err := q.db.Query(ctx, listHomeStormMetrics, stormID)
+func (q *Queries) ListHomeMetricsForStorm(ctx context.Context, stormID uuid.UUID) ([]HomeStormMetric, error) {
+	rows, err := q.db.Query(ctx, listHomeMetricsForStorm, stormID)
 	if err != nil {
 		return nil, err
 	}
