@@ -7,11 +7,26 @@ Phase: **3 — Cycle detection + alerts** — DONE 2026-09-11 (acceptance below;
 
 Phases **4 — Weather + storm analytics** and **5 — API gateway + dashboard** run in parallel (owner's call, 2026-09-12) on branches `phase-4/weather` and `phase-5/gateway`, both forked from `contracts/phase-4-5`.
 
-Phase: **4 — Weather + storm analytics** — work items done 2026-09-12 on `phase-4/weather`; acceptance: recession ±10 % met for every home, lag ±10 % not reachable for fast homes (data resolution) — the e2e accepts ±10 % or 15 min, pending the owner's decision (prompt_plan §14).
+Phase: **4 — Weather + storm analytics** — work items done 2026-09-12 on `phase-4/weather`; acceptance: recession ±10 % met for every home, lag ±10 % not reachable for fast homes (data resolution) — the e2e accepts ±10 % or 15 min with a 5-min median, approved by the owner 2026-09-12 (prompt_plan §14).
 
 Phase: **5 — API gateway + dashboard** — built on `phase-5/gateway` 2026-09-12: acceptance test passing (owner sees own home only, public views aggregate only); the "live storm replay visible on the map" check needs Phase 4 data and a browser check after merge.
 
 ## Session log (newest first)
+
+### 2026-09-12 (Phase 4 follow-up: owner decisions)
+- Owner: lag tolerance approved as built (§14 ticked; §12 Accept and ADR 0007 say so). PR #7 was merged by
+  the main session from origin/phase-4/weather; this follow-up is on `phase-4/pump-rate`.
+- Owner: add a pump-rate storm inflow estimate. `hydrology`: `Baseflow.PumpMMPerS` (median dry-weather
+  drop ÷ run over the baseflow cycles), `PumpRateLPS`, `PumpedVolume` (floor = pit drop; estimate =
+  rate × run, roll-ups × total run, never below the floor, backup runs at the floor),
+  `HomeStorm.InflowEstL` / `PumpRateLPS` / `PumpRateSource`. Migration 0006 adds
+  `home_storm_metrics.inflow_est_l`, `pump_rate_lps` and `pump_rate_source` (`dry_weather` now;
+  `bucket_test` reserved for a measured rate that overrides it); storm-analytics writes them;
+  `query.sql` / `query.proto` untouched.
+- e2e (storm50-long × 16): pump rate vs `HomeParams.pump_l_per_s` −0.3 … +4.7 % (median ≈1 %);
+  `inflow_est_l` vs truth storm `volume_l` + baseflow over the truth window −1.5 … +2.2 %
+  (median |error| 0.7 %); the pit-drop floor was −8.0 … −62.4 %. Tolerances 5 % (whole-second run
+  times on ~20 s runs) and 8 % (that plus two cycles of pit storage at the window edges).
 
 ### 2026-09-12 (merge of Phases 4 and 5)
 - PRs #5 (contracts), #6 (Phase 5) and #7 (Phase 4) merged on the owner's instruction; conflicts in README, ADR index, progress and sqlcgen resolved (sqlc regenerated).

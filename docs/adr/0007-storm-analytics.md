@@ -1,5 +1,5 @@
 # 0007 — Storm analytics: recompute from source, gauge-first rainfall
-Status: accepted (acceptance tolerance pending, see §14) · Date: 2026-09-12
+Status: accepted · Date: 2026-09-12 (lag tolerance and storm volume decided by the owner the same day)
 
 ## Context
 Phase 4 turns rain-gauge uplinks and ECCC observations into `rainfall`, and
@@ -43,6 +43,16 @@ heartbeats, individual cycles hours apart at baseflow.
   2 h on the falling limb); baseflow is the median of per-interval dry-weather
   rates. Units are millimetres of pit depth, so homes without a pit area
   still get lag and recession.
+- **Two storm volumes** (owner decision 2026-09-12). `volume_l` is the §9
+  pit-drop sum, kept as a conservative floor. `inflow_est_l` is the pump's
+  calibrated rate × run time: `pump_rate_lps` = pit area × the median level
+  drop per second of run over the same dry-weather cycles baseflow uses
+  (inflow during a dry run is well under 1 % of the pump rate), applied to
+  primary runs and roll-up run totals, never below a cycle's floor; backup
+  runs count at their floor. Both are NULL without a pit area or a
+  calibration. `pump_rate_source` records the rate's origin (`dry_weather`
+  today); a measured `bucket_test` rate — a known volume poured into the pit
+  and the pump timed — will override the learned one (migration 0006).
 
 ## Consequences
 - Replays, redeliveries, late uplinks and ECCC revisions converge to the same
@@ -57,10 +67,14 @@ heartbeats, individual cycles hours apart at baseflow.
   15-minute heartbeat and the gauges' resolution put ~5 minutes of noise on
   the crossing and the onset (evidence in `progress.md`). The e2e asserts
   ±10 % or 15 min, whichever is larger, plus a 5-minute median; recession
-  holds ±10 % for every home. The owner decides whether that stands (§14).
-- `volume_l` is the §9 estimate (pit area × level drop per cycle); it leaves
-  out inflow during a pump run and so understates storm inflow for homes
-  whose inflow approaches pump capacity (§14).
+  holds ±10 % for every home. The owner approved that tolerance on
+  2026-09-12 (§14).
+- `volume_l` (pit area × level drop) leaves out inflow during a pump run and
+  was 8–62 % below the true inflow in the e2e, worst where inflow approaches
+  pump capacity. `inflow_est_l` came within 2.2 % (pump rate within 5 %).
+  It assumes the pump keeps its dry-weather rate: a failing or clogged pump
+  is overestimated until its dry-weather cycles show the decline, and the
+  floor stays the safe number in that case.
 
 ## Alternatives considered
 - **Incremental state machine per storm/home** — cheaper per event, but late
