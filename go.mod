@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/MicahParks/keyfunc/v3 v3.8.2
-	github.com/chirpstack/chirpstack/api/go/v4 v4.19.1
+	github.com/chirpstack/chirpstack/api/go/v4 v4.19.2
 	github.com/eclipse/paho.golang v0.23.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
